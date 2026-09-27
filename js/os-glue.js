@@ -43,41 +43,49 @@
       });
     };
 
-    // ── c. Boot a role's desktop onto the v6 engine ────────────────────────
-    const bootedRoles = new Set();
+    // ── c. Role → v6 desktop / terminal switching (all 8 roles) ────────────
+    // Ensure the NEXORA terminal shell can fully overlay the v6 desktop.
+    (function ensureTerminalOverlay() {
+      const s = document.createElement('style');
+      s.textContent = '#terminal-shell.active{position:fixed;inset:0;z-index:9000;display:flex;}';
+      document.head.appendChild(s);
+    })();
 
+    let desktopEntered = false;
+    let shownRole = null;
+
+    function isTechRole(roleKey) {
+      const r = (typeof NEXORA !== 'undefined' && NEXORA.ROLES) ? NEXORA.ROLES[roleKey] : null;
+      return !!(r && r.shell === 'terminal');
+    }
+
+    // Show a role: Tech → terminal overlay (hide v6 desktop); win7 role → v6
+    // desktop with that role's icons. Idempotent per role via shownRole guard,
+    // so it works for the initial boot AND every later single-player switch.
     function osBootRole(roleKey) {
-      if (bootedRoles.has(roleKey)) return;
+      if (!roleKey || roleKey === shownRole) return;
+      shownRole = roleKey;
 
-      // NEXORA / STORYBOARD / WIN7_* are top-level `const` globals (lexical
-      // bindings, reachable as bare identifiers but NOT as window.X).
-      const role = (typeof NEXORA !== 'undefined' && NEXORA.ROLES && NEXORA.ROLES[roleKey]) || null;
+      const ts = document.getElementById('terminal-shell');
+      const screen = document.getElementById('screen'); // v6 desktop root
 
-      // Tech / terminal roles: reveal the NEXORA terminal shell, DO NOT boot the
-      // v6 desktop. NEXORA.setRole already called initTerminal() for these.
-      // (Out of scope for this spike — stub only.)
-      if (role && role.shell === 'terminal') {
-        const ts = document.getElementById('terminal-shell');
+      if (isTechRole(roleKey)) {
         if (ts) ts.classList.add('active');
+        if (screen) screen.style.visibility = 'hidden';
         return;
       }
 
-      // win7 roles (finance, hr, ops, marketing, legal, product, exec)
-      const roleDef = (typeof WIN7_ROLES !== 'undefined') ? WIN7_ROLES[roleKey] : null;
-      if (!roleDef) return; // unknown/unbooted role — no-op for the spike
-      bootedRoles.add(roleKey);
-
-      // Hide v6's own boot + login splash (auto-boot was neutralized, so they
-      // are still in their initial state and would otherwise cover the screen).
+      // win7 role
+      if (ts) ts.classList.remove('active');
+      if (screen) screen.style.visibility = '';
       document.getElementById('boot')?.classList.add('hidden');
       document.getElementById('login')?.classList.add('hidden');
-
-      // Bring up the REAL v6 desktop: shows #desktop, renders default icons,
-      // Start menu, taskbar + clock, plays startup chrome.
-      window.V6.enterDesktop();
-
-      // Replace v6's default desktop icons with this role's app icons.
-      paintRoleIcons(roleDef);
+      if (!desktopEntered) {
+        try { window.V6.enterDesktop(); } catch (e) { console.error('[os-glue] enterDesktop', e); }
+        desktopEntered = true;
+      }
+      const roleDef = (typeof WIN7_ROLES !== 'undefined') ? WIN7_ROLES[roleKey] : null;
+      if (roleDef) paintRoleIcons(roleDef);
     }
 
     function paintRoleIcons(roleDef) {
@@ -117,6 +125,18 @@
         try { osBootRole(k); } catch (e) { console.error('[os-glue] osBootRole failed', e); }
       };
     }
+
+    // Catch role switches that bypass the wrapper: NEXORA.nextRole() and the
+    // role-switcher dropdown both call the module-INTERNAL setRole closure, so
+    // watch currentRole and re-show the v6 desktop / terminal on any change.
+    setInterval(() => {
+      try {
+        if (typeof NEXORA !== 'undefined' && NEXORA.state && NEXORA.state.started) {
+          const cr = NEXORA.state.currentRole;
+          if (cr && cr !== shownRole) osBootRole(cr);
+        }
+      } catch (e) { /* ignore */ }
+    }, 400);
 
     // Expose for debugging / the role-switcher fallback.
     window.osBootRole = osBootRole;
