@@ -843,6 +843,21 @@ html, body {
 .win-dot.min   { background: #ffcc00; }
 .win-dot.max   { background: #28cd41; }
 
+/* Window controls carry BOTH .win-dot and .win-btn; the bare `.win-dot
+   { display:none }` above was hiding the real min/max/close buttons.
+   Re-show them (they render with the .win-btn styling). */
+.win-dot.win-btn {
+  display: flex;
+  width: 34px;
+  height: 27px;
+  border-radius: 3px;
+  background: transparent;
+}
+.win-dot.win-btn.close { background: transparent; }
+.win-dot.win-btn.min   { background: transparent; }
+.win-dot.win-btn.max   { background: transparent; }
+.win-dot.win-btn.close:hover { background: #bf3a3a; }
+
 /* Window body — bright Win7 look */
 .win-body {
   flex: 1;
