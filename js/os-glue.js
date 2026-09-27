@@ -113,6 +113,32 @@
         }
         host.appendChild(d);
       });
+
+      // Also surface v6's real built-in Windows-7 apps on every role desktop,
+      // so it reads as an actual workstation (File Explorer, Task Manager,
+      // Notepad, Control Panel, Recycle Bin) — per the "real PC" blueprint.
+      const builtins = [
+        { app: 'explorer', emoji: '🗂️', label: 'Computer' },
+        { app: 'taskmgr',  emoji: '📊', label: 'Task Manager' },
+        { app: 'notepad',  emoji: '📝', label: 'Notepad' },
+        { app: 'control',  emoji: '⚙️', label: 'Control Panel' },
+      ];
+      builtins.forEach(b => {
+        if (!window.V6.APP_META || !window.V6.APP_META[b.app]) return; // only if v6 has it
+        const d = document.createElement('div');
+        d.className = 'desk-icon';
+        d.innerHTML =
+          `<div class="icon-art" style="font-size:34px;line-height:44px">${b.emoji}</div>` +
+          `<div class="icon-label">${b.label}</div>`;
+        d.addEventListener('click', () => {
+          document.querySelectorAll('#desktop-icons .desk-icon').forEach(x => x.classList.remove('selected'));
+          d.classList.add('selected');
+        });
+        d.addEventListener('dblclick', () => {
+          try { window.V6.openWindow(b.app, { singleton: true }); } catch (e) { console.error('[os-glue] open builtin', b.app, e); }
+        });
+        host.appendChild(d);
+      });
     }
 
     // Wrap NEXORA.setRole so a role boot also drives the v6 desktop. startGame()
