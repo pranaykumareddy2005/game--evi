@@ -1050,7 +1050,9 @@ window.addEventListener('beforeunload',saveState);
 window.V6 = {
   openWindow, closeWindow, launchApp, APP_META, desktopApps,
   renderDesktopIcons, renderStartMenu, renderTaskbar, enterDesktop,
-  state, saveState, windows
+  state, saveState, windows,
+  // Virtual-filesystem helpers so the NEXORA glue can seed evidence docs.
+  ensureDir, ensureFile, getNode, normalizePath
 };
 
 // Auto-boot NEUTRALIZED: the NEXORA storyboard controls startup now.

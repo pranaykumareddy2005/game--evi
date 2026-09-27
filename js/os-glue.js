@@ -51,6 +51,51 @@
       document.head.appendChild(s);
     })();
 
+    // ── v6-only overrides (injected here → never affect the modular build) ──
+    // These styles load ONLY inside nexora-os.html (this file is the v6 glue),
+    // so index.html / css/nexora.css keep their original behaviour untouched.
+    (function injectV6Overrides() {
+      const s = document.createElement('style');
+      s.textContent = [
+        // TASK 1 — Lift the NEXORA floating overlay buttons clear of v6's
+        // 48px-tall bottom taskbar (nexora-os.html #taskbar). Without this they
+        // sit at bottom:16px and cover the Start orb / tray. Real selectors:
+        //   #chat-toggle    (game-state.js)
+        //   #next-role-btn  (storyboard.js, single-player advance)
+        //   #verdict-btn    (verdict.js)
+        //   #invboard-btn   (investigation-board.js — the "⬡ BOARD" button)
+        '#verdict-btn,#chat-toggle,#next-role-btn,#invboard-btn{bottom:60px !important;}',
+
+        // TASK 2 — Scope the css/nexora.css `.window` bleed. nexora.css restyles
+        // ALL `.window` elements (light bg, resize:both, an entrance animation),
+        // which also hits v6's own windows (same class). We cannot edit
+        // nexora.css, so neutralise the bleeding rules and re-assert v6's real
+        // window chrome (values copied from nexora-os.html inline `.window` CSS).
+        '.window{' +
+          'resize:none !important;' +
+          'animation:none !important;' +
+          'background:#eef4f8 !important;' +
+          'border:1px solid #3b6f99 !important;' +
+          'border-radius:7px !important;' +
+          'box-shadow:0 14px 30px rgba(0,0,0,.45) !important;' +
+        '}',
+        // Keep v6's active-window glow intact after the reset above.
+        '.window.active{box-shadow:0 15px 35px rgba(0,0,0,.52),0 0 0 1px rgba(106,190,255,.2) !important;}',
+        // v6's window body uses its own light surface; keep it clean.
+        '.window .window-content{background:#f7fbfe !important;}',
+
+        // TASK 3 — Resolve dual audio. v6 has its own audio engine (initAudio /
+        // systemSound) and auto-plays a low ambient hum on enterDesktop. NEXORA's
+        // js/audio.js (window.AUDIO) is MUTED by default, so it adds no sound —
+        // but it also injects a floating #nexora-audio-toggle whose only effect
+        // in this page is to start a SECOND competing ambient hum on top of v6's.
+        // v6 is the single master for OS chrome sound, so hide NEXORA's toggle
+        // here (audio.js is untouched; its ambient never auto-starts).
+        '#nexora-audio-toggle{display:none !important;}',
+      ].join('\n');
+      document.head.appendChild(s);
+    })();
+
     let desktopEntered = false;
     let shownRole = null;
 
@@ -86,6 +131,57 @@
       }
       const roleDef = (typeof WIN7_ROLES !== 'undefined') ? WIN7_ROLES[roleKey] : null;
       if (roleDef) paintRoleIcons(roleDef);
+      seedEvidenceDocs(roleKey);
+    }
+
+    // ── TASK 4 — Seed NEXORA evidence into v6's virtual File Explorer ──────
+    // For each win7 role, drop 3–6 of that role's NEXORA.EVIDENCE items into the
+    // v6 filesystem as browsable corporate .txt docs. Uses the FS helpers now
+    // exported on the bridge (V6.ensureDir / ensureFile / getNode) + saveState.
+    // Idempotent per role. Files land in a single "NEXORA Evidence" folder so
+    // the player can "browse the PC to find clues".
+    const seededRoles = new Set();
+    const SEED_DIR = 'C:/Users/User/Documents/NEXORA Evidence';
+
+    // Turn an evidence label into a corporate-looking filename, e.g.
+    // "Orion Consulting: ₹24,80,000 transferred…" → "Orion_Consulting_C-01.txt".
+    function docFileName(ev) {
+      let base = String(ev.label || ev.id).split(/[:\u2014(]/)[0];
+      let words = base.replace(/[^A-Za-z0-9 ]/g, ' ').split(/\s+/).filter(Boolean).slice(0, 4);
+      if (!words.length) words = [ev.id];
+      // Suffix the evidence id to guarantee uniqueness across similarly-named clues.
+      return words.join('_') + '_' + ev.id + '.txt';
+    }
+
+    function seedEvidenceDocs(roleKey) {
+      if (!roleKey || seededRoles.has(roleKey)) return;
+      if (typeof NEXORA === 'undefined' || !NEXORA.EVIDENCE) return;
+      if (!window.V6 || !window.V6.ensureDir || !window.V6.ensureFile) return;
+      try {
+        const roleLabel = (NEXORA.ROLES && NEXORA.ROLES[roleKey] && NEXORA.ROLES[roleKey].label) || roleKey;
+        const items = Object.values(NEXORA.EVIDENCE)
+          .filter(ev => ev.role === roleKey)
+          .slice(0, 6); // 3–6 docs per role
+        if (!items.length) { seededRoles.add(roleKey); return; }
+
+        window.V6.ensureDir(SEED_DIR);
+        items.forEach(ev => {
+          const path = SEED_DIR + '/' + docFileName(ev);
+          const content =
+            'NEXORA INTERNAL — ' + String(roleLabel).replace(/[^\x20-\x7E]/g, '').trim() + ' DEPARTMENT\r\n' +
+            'Document ref: ' + ev.id + '\r\n' +
+            '------------------------------------------------------------\r\n\r\n' +
+            ev.label + '\r\n\r\n' +
+            '[Recovered from a company workstation during the ECHO lockdown investigation.\r\n' +
+            ' Cross-reference this record against the Investigation Board.]\r\n';
+          // ensureFile is a no-op if the file already exists (idempotent).
+          window.V6.ensureFile(path, { type: 'file', ext: 'txt', content: content, nexoraEvidence: ev.id });
+        });
+        window.V6.saveState();
+        seededRoles.add(roleKey);
+      } catch (e) {
+        console.error('[os-glue] seedEvidenceDocs failed', e);
+      }
     }
 
     function paintRoleIcons(roleDef) {
