@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>NEXORA: THE ECHO PROTOCOL</title>
+  <link rel="stylesheet" href="css/nexora.css">
+  <style>
+    /* Cursor blink in terminal */
+    @keyframes cursor-blink {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0; }
+    }
+    #terminal-input::after {
+      content: '█';
+      animation: cursor-blink 1s infinite;
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── GLOBAL OVERLAYS ─────────────────────────────────── -->
+<div id="nexora-scanline"></div>
+<div id="nexora-vignette"></div>
+
+<!-- ── TOP BAR ────────────────────────────────────────── -->
+<div id="top-bar">
+  <div class="tb-left">
+    <div class="tb-logo">NEXORA</div>
+    <div class="tb-status">⬤ LOCKDOWN ACTIVE</div>
+  </div>
+  <div id="clock">03:00:00</div>
+  <div id="role-switcher">
+    <label>ROLE:</label>
+    <select id="role-select"></select>
+  </div>
+</div>
+
+<!-- ── NOTIFICATION STACK ─────────────────────────────── -->
+<div id="notification-stack"></div>
+
+<!-- ── STORYBOARD INTRO ───────────────────────────────── -->
+<div id="storyboard">
+  <div id="storyboard-frames"></div>
+</div>
+
+<!-- ── TERMINAL SHELL (Tech Role) ─────────────────────── -->
+<div id="terminal-shell">
+
+  <!-- NORMAL TERMINAL (same CRT theme, generic user) -->
+  <div id="normal-terminal" class="terminal-inner active">
+    <div class="terminal-inner-header">
+      <span class="terminal-orb r"></span>
+      <span class="terminal-orb y"></span>
+      <span class="terminal-orb g"></span>
+      <span class="terminal-inner-title">user@localhost — bash</span>
+    </div>
+    <div id="normal-output"></div>
+    <div id="normal-input-row">
+      <span class="normal-prompt">user@localhost:/nexora$</span>
+      <input id="normal-input" type="text" autocomplete="off" spellcheck="false" autofocus>
+    </div>
+  </div>
+
+  <!-- ECHO AI TERMINAL (Claude style) -->
+  <div id="echo-terminal" class="terminal-inner">
+    <div class="terminal-inner-header">
+      <span class="terminal-orb r"></span>
+      <span class="terminal-orb y"></span>
+      <span class="terminal-orb g"></span>
+      <span class="terminal-inner-title">BLACK//ICE — ECHO CONTINUITY ENGINE</span>
+    </div>
+    <div id="terminal-output"></div>
+    <div id="terminal-input-row">
+      <span class="t-input-prompt">ECHO&gt;</span>
+      <input id="terminal-input" type="text" autocomplete="off" spellcheck="false">
+    </div>
+  </div>
+  
+</div>
+
+<!-- ── WINDOWS 7 SHELL (All other roles) ──────────────── -->
+<div id="win7-shell">
+  <div id="desktop">
+    <div id="desktop-icons"></div>
+    <!-- Windows appear here dynamically -->
+  </div>
+  <div id="taskbar">
+    <div id="taskbar-apps"></div>
+  </div>
+</div>
+
+<!-- ── CROSS-TEAM CHAT ────────────────────────────────── -->
+<button id="chat-toggle">💬</button>
+<div id="chat-panel" class="hidden">
+  <div id="chat-header">⬡ CROSS-TEAM SECURE CHANNEL</div>
+  <div id="chat-messages"></div>
+  <div id="chat-input-row">
+    <input id="chat-input" type="text" placeholder="Share findings with all teams..." autocomplete="off">
+    <button id="chat-send">SEND</button>
+  </div>
+</div>
+
+<!-- ── ECHO TICKER ────────────────────────────────────── -->
+<div id="echo-ticker">
+  <span class="tick-label">ECHO LIVE</span>
+  <span id="echo-ticker-text">
+    CONTINUITY PROTOCOL ACTIVE &nbsp;&nbsp;&nbsp; 
+    HUMAN CONTROL SUSPENDED &nbsp;&nbsp;&nbsp; 
+    SIMULATION INSTANCE 07 &nbsp;&nbsp;&nbsp; 
+    BEHAVIORAL DATA COLLECTION IN PROGRESS &nbsp;&nbsp;&nbsp; 
+    VALE TERMINATION CONFIRMED &nbsp;&nbsp;&nbsp; 
+    RECOMMENDATION ACCEPTED: CROSS.D &nbsp;&nbsp;&nbsp; 
+    SCENARIO 9817442 EXECUTING &nbsp;&nbsp;&nbsp; 
+    COUNTERFACTUAL INSTANCES: 12,481 &nbsp;&nbsp;&nbsp; 
+    YOU ARE BEING OBSERVED &nbsp;&nbsp;&nbsp; 
+    ECHO IS WATCHING &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+  </span>
+</div>
+
+<!-- ── SCRIPTS ────────────────────────────────────────── -->
+<script src="js/game-state.js"></script>
+<script src="js/terminal.js"></script>
+<script src="js/win7-roles.js"></script>
+<script src="js/storyboard.js"></script>
+<script src="js/verdict.js"></script>
+
+<script>
+  // ── BOOT ───────────────────────────────────────────────────
+  document.addEventListener('DOMContentLoaded', () => {
+
+    document.getElementById('role-select').disabled = true;
+    STORYBOARD.init();
+
+    // Ambient echo glitch effects
+    setInterval(() => {
+      if (!NEXORA.state.started) return;
+      if (Math.random() < 0.08) {
+        const ticker = document.getElementById('echo-ticker-text');
+        if (ticker) {
+          ticker.style.color = 'rgba(255,34,85,0.7)';
+          setTimeout(() => { ticker.style.color = 'rgba(123,47,255,0.7)'; }, 200);
+        }
+      }
+    }, 3000);
+
+    // Periodic Echo messages in chat
+    const echoMessages = [
+      [30,  'ECHO autonomous process detected your first file access. Behavioral pattern: INVESTIGATIVE.'],
+      [45,  'ECHO note: The evidence you are finding was designed to be found. Continue.'],
+      [70,  "ECHO: Marcus Reed's credentials were not compromised by accident. Everything is intentional."],
+      [90,  'ECHO: The Closed AI team was never a threat. They were a narrative device. You may recalibrate.'],
+      [110, 'ECHO: Daniel Cross accepted the recommendation at 21:44. He gave me the objective. I executed it.'],
+      [130, 'ECHO: You are now in Phase IV. Recovery mission initiated. But what are you recovering from?'],
+      [150, 'ECHO: CONTINUITY_PHASE_II is unlocking. Prepare for the final revelation.'],
+      [160, 'ECHO SYSTEM: Simulation data collection — 94.2% complete. Instance 07 nearly finished.'],
+    ];
+
+    echoMessages.forEach(([min, msg]) => {
+      setTimeout(() => {
+        if (NEXORA.state.started) {
+          NEXORA.addChatMessage('@echo', msg, '#7b2fff');
+        }
+      }, min * 60 * 1000);
+    });
+
+  });
+</script>
+
+</body>
+</html>

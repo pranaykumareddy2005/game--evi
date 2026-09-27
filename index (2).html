@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>BLACK//ICE — Terminal Interface</title>
+<style>
+  :root{
+    --bg:#010301;
+    --panel:#031006;
+    --panel2:#07170a;
+    --text:#b9ffbe;
+    --muted:#4d8654;
+    --green:#61ff71;
+    --green2:#16d83b;
+    --green3:#baffbd;
+    --line:rgba(97,255,113,.22);
+    --shadow:0 0 28px rgba(38,255,72,.13), inset 0 0 50px rgba(0,0,0,.62);
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0;background:#000;color:var(--text);font-family:"Courier New",ui-monospace,monospace;overflow:hidden}
+  body{
+    background:
+      radial-gradient(ellipse at center, rgba(45,255,70,.055) 0%, rgba(0,20,4,.72) 35%, #000 78%),
+      repeating-linear-gradient(0deg, rgba(255,255,255,.012) 0 1px, transparent 1px 3px),
+      #000;
+  }
+  body:before{
+    content:"";position:fixed;inset:0;pointer-events:none;z-index:80;
+    background:
+      repeating-linear-gradient(to bottom, rgba(112,255,120,.10) 0, rgba(112,255,120,.10) 1px, transparent 1px, transparent 4px),
+      linear-gradient(rgba(255,255,255,.018),rgba(255,255,255,.018));
+    mix-blend-mode:screen;opacity:.42;
+    animation:scanRoll 7s linear infinite;
+  }
+  body:after{
+    content:"";position:fixed;inset:-3%;pointer-events:none;z-index:81;
+    background:
+      radial-gradient(ellipse at center, transparent 46%, rgba(0,0,0,.25) 70%, rgba(0,0,0,.9) 100%),
+      repeating-linear-gradient(90deg, rgba(97,255,113,.015) 0 1px, transparent 1px 5px);
+    box-shadow:inset 0 0 180px #000;
+  }
+  @keyframes scanRoll{0%{transform:translateY(-8%)}100%{transform:translateY(8%)}}
+  .frame{height:100%;display:grid;grid-template-rows:44px 1fr 28px;position:relative;animation:flicker 6s infinite;filter:contrast(1.08) saturate(.72)}
+  @keyframes flicker{0%,92%,100%{filter:contrast(1.08) saturate(.72) brightness(.97)}94%{filter:contrast(1.3) saturate(.9) brightness(1.25)}94.4%{filter:contrast(.75) brightness(.64)}95%{filter:contrast(1.45) brightness(1.02)}95.8%{filter:contrast(1.08) saturate(.72) brightness(.97)}}
+  .topbar{display:flex;align-items:center;justify-content:space-between;padding:0 16px;border-bottom:1px solid rgba(97,255,113,.3);background:linear-gradient(180deg,#081408,#020603);box-shadow:0 5px 28px rgba(0,0,0,.78),inset 0 -1px 0 rgba(97,255,113,.08);position:relative;z-index:90}
+  .brand{display:flex;align-items:center;gap:10px;font-size:12px;letter-spacing:.2em;color:var(--green3);text-transform:uppercase;text-shadow:0 0 4px rgba(97,255,113,.95),0 0 18px rgba(97,255,113,.55)}
+  .dot{width:8px;height:8px;background:var(--green);box-shadow:0 0 8px var(--green),0 0 24px rgba(97,255,113,.75);border-radius:50%;animation:pulse .9s infinite}
+  @keyframes pulse{50%{opacity:.35;transform:scale(.7)}}
+  .status{font-size:10px;letter-spacing:.12em;color:var(--muted);display:flex;gap:18px;text-transform:uppercase}
+  .status b{color:var(--cyan);font-weight:400}
+  .workspace{min-height:0;display:flex;align-items:center;justify-content:center;padding:28px 4vw 24px;position:relative;z-index:3;background:radial-gradient(ellipse at center,rgba(41,255,70,.045),transparent 58%)}
+  .terminal-shell{background:linear-gradient(180deg,rgba(2,10,4,.98),rgba(0,4,1,.995));border:1px solid rgba(97,255,113,.32);box-shadow:var(--shadow);min-height:0;width:min(1500px,100%);height:100%;}
+  .sidebar{padding:12px;overflow:auto;box-shadow:0 0 28px rgba(0,0,0,.9),inset 0 0 28px rgba(27,255,55,.035)}
+  .section-label{font-size:10px;letter-spacing:.16em;color:#567263;text-transform:uppercase;margin:4px 0 9px}
+  .tree{font-size:12px;line-height:1.65;color:#9dc5ad}
+  .tree span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .tree .dir{color:var(--cyan)}
+  .tree .file{color:#b9c8c0}
+  .tree .secret{color:var(--red)}
+  .hint{font-size:10px;color:#52675a;line-height:1.45;margin-top:16px;padding-top:12px;border-top:1px dashed var(--line)}
+  .terminal-shell{display:flex;flex-direction:column;position:relative;overflow:hidden;border-radius:42px / 30px;box-shadow:0 0 50px rgba(44,255,65,.11),0 0 90px rgba(0,0,0,.9),inset 0 0 70px rgba(0,0,0,.82),inset 0 0 0 10px rgba(0,0,0,.35);isolation:isolate}
+  .terminal-shell:after{content:"";position:absolute;inset:7px;pointer-events:none;z-index:5;border:1px solid rgba(150,255,160,.08);border-radius:38px / 27px;box-shadow:inset 0 0 24px rgba(120,255,130,.05),0 0 1px rgba(140,255,150,.25)}
+  .terminal-shell:before{content:"";position:absolute;inset:0;pointer-events:none;z-index:6;border-radius:inherit;background:radial-gradient(ellipse at center,transparent 58%,rgba(0,0,0,.1) 73%,rgba(0,0,0,.72) 100%);box-shadow:inset 0 0 100px rgba(0,0,0,.75),inset 0 0 12px rgba(97,255,113,.12);}
+  .terminal-header{height:34px;display:flex;align-items:center;padding:0 12px;border-bottom:1px solid rgba(97,255,113,.24);background:#020903;gap:6px;z-index:8}
+  .orb{width:8px;height:8px;border-radius:50%;background:#0a1b0c;box-shadow:0 0 0 1px #1b4c21}.orb.r{background:#37ff51;box-shadow:0 0 10px #37ff51}.orb.y{background:#86ff8d;box-shadow:0 0 10px #86ff8d}.orb.g{background:#d0ffd0;box-shadow:0 0 12px #61ff71}
+  .terminal-title{font-size:10px;color:#5e7567;margin-left:8px;letter-spacing:.08em}
+  #screen{flex:1;overflow:auto;padding:20px 21px 28px;font-size:14px;line-height:1.5;position:relative;background:radial-gradient(ellipse at 50% 35%,rgba(74,255,92,.09),transparent 60%);text-shadow:0 0 5px rgba(97,255,113,.8),0 0 14px rgba(97,255,113,.28);scroll-behavior:smooth;z-index:2;animation:phosphor 3.4s ease-in-out infinite}
+  @keyframes phosphor{0%,100%{filter:brightness(.98)}49%{filter:brightness(1.05)}50%{filter:brightness(.92)}51%{filter:brightness(1.02)}}
+  #screen::-webkit-scrollbar{width:8px} #screen::-webkit-scrollbar-thumb{background:#173524;border:1px solid #22553a}
+  .line{white-space:pre-wrap;word-break:break-word}.out{color:#b9ffbe}.dim{color:#4f965a}.warn{color:#b7ff78}.err{color:#7dff81}.info{color:#82ff8e}.prompt{color:var(--green3)}
+  .cmdline{display:flex;align-items:center;gap:7px;margin-top:3px}
+  .prompttext{color:var(--green);white-space:nowrap}
+  #input{flex:1;background:transparent;border:0;outline:0;color:#f0fff5;font:inherit;caret-color:transparent;min-width:0;padding:0;text-shadow:0 0 7px rgba(138,255,181,.3);position:relative;z-index:2}
+  #inputWrap{position:relative;flex:1;min-width:0;height:1.5em;display:flex;align-items:center}
+  #terminalCursor{position:absolute;left:0;top:50%;width:.62em;height:1.05em;transform:translateY(-50%);background:var(--green);box-shadow:0 0 5px var(--green),0 0 13px rgba(97,255,113,.75);z-index:4;pointer-events:none;animation:cursorBlink .72s steps(2,end) infinite;mix-blend-mode:screen}
+  #cursorMeasure{position:absolute;left:0;top:0;white-space:pre;font:inherit;visibility:hidden;pointer-events:none}
+  @keyframes cursorBlink{0%,45%{opacity:1}46%,100%{opacity:0}}
+  .signal-distort{animation:signalDistort .34s steps(2,end) both}
+  @keyframes signalDistort{0%{transform:none;filter:contrast(1.05)}12%{transform:translateX(-2px) skewX(.35deg) scaleX(1.004);filter:contrast(1.35)}27%{transform:translateX(3px) skewX(-.55deg) scaleX(.996)}43%{transform:translateX(-1px) scaleY(1.006);filter:contrast(1.18)}58%{transform:translateX(2px) skewX(.3deg);filter:contrast(1.42)}76%{transform:translateX(-1px) scaleX(1.002)}100%{transform:none;filter:none}}
+  .signal-tear{position:absolute;left:-3%;right:-3%;height:7%;top:var(--tear-top,42%);background:repeating-linear-gradient(0deg,rgba(170,255,178,.16) 0 1px,transparent 1px 3px);z-index:18;pointer-events:none;mix-blend-mode:screen;opacity:0;transform:translateX(-8%)}
+  .signal-tear.active{opacity:.6;animation:tearMove .32s steps(3,end) both}
+  @keyframes tearMove{0%{transform:translateX(-8%) skewX(0)}35%{transform:translateX(5%) skewX(-1deg)}65%{transform:translateX(-3%) skewX(1deg)}100%{transform:translateX(8%) skewX(0);opacity:0}}
+  .terminal-shell.retro-hit{box-shadow:0 0 70px rgba(44,255,65,.18),0 0 100px rgba(0,0,0,.95),inset 0 0 75px rgba(0,0,0,.88),inset 0 0 0 10px rgba(0,0,0,.35)}
+  #input::selection{background:rgba(85,233,255,.2)}
+  .glitch-layer{position:absolute;inset:0;pointer-events:none;overflow:hidden;opacity:.16;mix-blend-mode:screen;z-index:20;background:repeating-linear-gradient(0deg,rgba(97,255,113,.06) 0 1px,transparent 1px 5px)}
+  .glitch-layer:before,.glitch-layer:after{content:"";position:absolute;left:-5%;width:110%;height:2px;background:linear-gradient(90deg,transparent,var(--green),transparent);animation:scan .36s steps(2,end) infinite}
+  .glitch-layer:after{height:34%;top:38%;left:-10%;width:120%;background:repeating-linear-gradient(0deg,rgba(184,255,189,.16) 0 1px,transparent 1px 3px);mix-blend-mode:screen;animation:staticBand .2s steps(2,end) infinite}
+  .glitch-layer:before{top:28%;box-shadow:0 22px var(--green),0 71px var(--green2),0 145px rgba(255,255,255,.5);}
+  .glitch .glitch-layer{opacity:.72}
+  .glitch #screen{animation:shake .12s steps(2,end) 4,warp .32s steps(2,end) 2}
+  @keyframes staticBand{0%{transform:translateX(-3%) scaleY(.8)}50%{transform:translateX(4%) scaleY(1.1)}100%{transform:translateX(-5%) scaleY(.7)}}
+  @keyframes warp{0%,100%{clip-path:inset(0 0 0 0)}25%{clip-path:inset(4% 0 62% 0)}50%{clip-path:inset(58% 0 3% 0)}75%{clip-path:inset(15% 0 38% 0)}}
+  @keyframes scan{from{transform:translateX(-8%)}to{transform:translateX(8%)}}
+  @keyframes shake{0%{transform:translate(0)}25%{transform:translate(-2px,1px)}50%{transform:translate(2px,-1px)}75%{transform:translate(-1px,0)}100%{transform:translate(0)}}
+  .footer{display:flex;align-items:center;justify-content:space-between;padding:0 14px;border-top:1px solid rgba(97,255,113,.23);background:#020602;color:#397944;font-size:9px;letter-spacing:.1em;text-transform:uppercase;box-shadow:0 -5px 25px rgba(0,0,0,.75)}
+  .footer .hot{color:var(--green)}
+  .boot-logo{color:var(--green);font-weight:bold;letter-spacing:.05em}
+  @media(max-width:800px){.workspace{padding:12px 8px 10px}.status{display:none}.topbar{padding:0 10px}.brand{font-size:10px}.terminal-shell{border-radius:28px / 22px}#screen{font-size:13px;padding:14px}}
+</style>
+
+<style>
+  /* EPIC 90s terminal extras */
+  .cmdline.active .prompttext{text-shadow:0 0 6px rgba(97,255,113,.95),0 0 18px rgba(97,255,113,.42)}
+  .cmdline.active #input{text-shadow:0 0 8px rgba(174,255,185,.65),0 0 18px rgba(97,255,113,.22)}
+  .editor-overlay,.matrix-overlay{position:absolute;inset:0;z-index:40;background:rgba(0,4,1,.96);display:flex;flex-direction:column;font-family:"Courier New",ui-monospace,monospace;color:#baffbd;text-shadow:0 0 7px rgba(97,255,113,.72)}
+  .editor-bar{height:30px;display:flex;align-items:center;justify-content:space-between;padding:0 12px;border-bottom:1px solid rgba(97,255,113,.28);background:#061108;color:#61ff71;font-size:11px;letter-spacing:.08em}
+  .editor-text{flex:1;width:100%;resize:none;border:0;outline:0;background:radial-gradient(ellipse at center,rgba(73,255,92,.045),transparent 70%),#010501;color:#baffbd;font:14px/1.5 "Courier New",monospace;padding:16px 18px;caret-color:#61ff71;text-shadow:0 0 6px rgba(97,255,113,.72);box-shadow:inset 0 0 55px rgba(0,0,0,.7)}
+  .editor-foot{height:28px;padding:6px 12px;border-top:1px solid rgba(97,255,113,.2);font-size:10px;color:#4d8654;background:#020702}
+  .matrix-overlay{overflow:hidden;background:#000}
+  .matrix-canvas{width:100%;height:100%;display:block;image-rendering:pixelated}
+  .matrix-hud{position:absolute;top:9px;left:12px;right:12px;display:flex;justify-content:space-between;color:rgba(112,255,120,.65);font-size:10px;letter-spacing:.12em;pointer-events:none}
+  .matrix-exit{position:absolute;bottom:8px;right:12px;color:rgba(112,255,120,.48);font-size:9px;letter-spacing:.1em;pointer-events:none}
+  .htop-overlay{position:absolute;inset:0;z-index:40;background:rgba(0,4,1,.97);display:flex;flex-direction:column;font-family:"Courier New",ui-monospace,monospace;color:#baffbd;text-shadow:0 0 7px rgba(97,255,113,.72);padding:10px 12px;}
+  .htop-head{display:flex;justify-content:space-between;border-bottom:1px solid rgba(97,255,113,.25);padding-bottom:7px;color:#61ff71;font-size:11px}
+  .htop-meter{margin:8px 0;color:#79ff86;font-size:11px;white-space:pre;line-height:1.4}
+  .htop-table{flex:1;overflow:hidden;font-size:11px;line-height:1.55;white-space:pre}
+  .htop-foot{border-top:1px solid rgba(97,255,113,.2);padding-top:7px;color:#4d8654;font-size:10px}
+  .sound-pop{position:absolute;inset:auto 12px 12px auto;color:rgba(186,255,189,.42);font-size:9px;letter-spacing:.1em;z-index:45;pointer-events:none;animation:soundPop .42s steps(3,end) both}
+  @keyframes soundPop{0%{opacity:0;transform:translateX(8px)}25%{opacity:1}100%{opacity:0;transform:translateX(0)}}
+</style>
+</head>
+<body>
+<div class="frame" id="frame">
+  <header class="topbar">
+    <div class="brand"><span class="dot"></span> BLACK//ICE <span style="color:#3c5548">::</span> clandestine terminal</div>
+    <div class="status"><span>NODE <b id="node">07</b></span><span>LINK <b>ENCRYPTED</b></span><span>MODE <b>SIM</b></span></div>
+  </header>
+  <main class="workspace">
+    <section class="terminal-shell" id="terminalShell">
+      <div class="terminal-header"><span class="orb r"></span><span class="orb y"></span><span class="orb g"></span><span class="terminal-title">root@blackice:/home/ghost</span></div>
+      <div id="screen"></div>
+      <div class="signal-tear" id="signalTear"></div>
+      <div class="glitch-layer"></div>
+    </section>
+  </main>
+  <footer class="footer"><span>STATUS: <span class="hot">ONLINE</span></span><span>[ENTER] RUN · [TAB] COMPLETE · [↑↓] HISTORY · [CTRL+L] CLEAR · [CTRL+K] GLITCH</span></footer>
+</div>
+<script>
+(() => {
+  const screen = document.getElementById('screen');
+  const shell = document.getElementById('terminalShell');
+  const treeEl = document.getElementById('tree');
+  const input = document.createElement('input');
+  input.id = 'input';
+  const frame = document.getElementById('frame');
+  const nodeEl = document.getElementById('node');
+  const signalTear = document.getElementById('signalTear');
+
+  const state = {
+    cwd:'/home/ghost', history:[], histIndex:0, tabIndex:0,
+    audio:null, glitchTimer:null, editor:null, matrix:null, htop:null, soundSeq:0, pendingTimers:[], pendingJob:null,
+    fs:{
+      '/': {type:'dir', children:['bin','boot','dev','etc','home','opt','tmp','var']},
+      '/bin':{type:'dir',children:['bash','cat','chmod','cp','echo','find','grep','kill','ls','mkdir','mv','ps','pwd','rm','rmdir','sleep','touch','whoami']},
+      '/boot':{type:'dir',children:['blackice.conf','init.log']},
+      '/dev':{type:'dir',children:['null','random','tty0']},
+      '/etc':{type:'dir',children:['hostname','hosts','issue','os-release','passwd','shadow.txt','blackice.conf','motd']},
+      '/home':{type:'dir',children:['ghost','guest']},
+      '/home/ghost':{type:'dir',children:['Desktop','Documents','Downloads','vault','mission.txt','access.log','.bashrc']},
+      '/home/ghost/Desktop':{type:'dir',children:['README.txt','launch.sh']},
+      '/home/ghost/Documents':{type:'dir',children:['incident-report.txt','notes.txt','network-map.txt']},
+      '/home/ghost/Downloads':{type:'dir',children:['payload.bin','old_keys.txt']},
+      '/home/ghost/vault':{type:'dir',children:['credentials.txt','keys.txt','do_not_open.txt']},
+      '/home/guest':{type:'dir',children:['readme.txt']},
+      '/opt':{type:'dir',children:['blackice','tools']},
+      '/opt/blackice':{type:'dir',children:['core.dat','config.cfg','events.log']},
+      '/opt/tools':{type:'dir',children:['trace','decode','probe']},
+      '/tmp':{type:'dir',children:['session.lock','scratch.txt']},
+      '/var':{type:'dir',children:['log','tmp']},
+      '/var/log':{type:'dir',children:['auth.log','syslog','blackice.log']},
+      '/var/tmp':{type:'dir',children:[]},
+      '/etc/hostname':{type:'file',content:'blackice-node07\n'},
+      '/etc/hosts':{type:'file',content:'127.0.0.1 localhost\n10.13.37.7 blackice-node07\n'},
+      '/etc/issue':{type:'file',content:'BLACK//ICE SIMULATOR\\nAuthorized operators only.\n'},
+      '/etc/os-release':{type:'file',content:'NAME="BLACK//ICE LINUX"\nVERSION="7.13 (Ghostwire)"\nID=blackice\n'},
+      '/etc/passwd':{type:'file',content:'root:x:0:0:root:/root:/bin/bash\nghost:x:1000:1000:Ghost Operator:/home/ghost:/bin/bash\nguest:x:1001:1001:Guest:/home/guest:/bin/bash\n'},
+      '/etc/shadow.txt':{type:'file',content:'# PROP FILE — FICTIONAL / NOT REAL CREDENTIALS\nroot:$6$DEMO$not-a-real-password-hash\nghost:$6$DEMO$simulation-only\n'},
+      '/etc/blackice.conf':{type:'file',content:'NODE=07\nTHEME=CRT_GHOST\nAUDIO=ON\nGLITCH=ADAPTIVE\nMODE=SIMULATION\n'},
+      '/etc/motd':{type:'file',content:'WELCOME, GHOST.\nRemember: the filesystem is not real. The mission is.\n'},
+      '/boot/blackice.conf':{type:'file',content:'BOOT_SEQUENCE=GHOSTWIRE\nKERNEL=5.19.13-bi\n'},
+      '/boot/init.log':{type:'file',content:'[ OK ] virtual tty initialized\n[ OK ] encrypted theme loaded\n[ OK ] glitch engine online\n'},
+      '/home/ghost/mission.txt':{type:'file',content:'MISSION // NIGHTFALL\n\nFind the phrase hidden in /home/ghost/vault/do_not_open.txt.\nUse ordinary filesystem commands.\nDo not trust files named old_keys.txt.\n'},
+      '/home/ghost/Desktop/README.txt':{type:'file',content:'BLACK//ICE training shell. Try `help`, `tree`, `ls -la`, `cat mission.txt`.\n'},
+      '/home/ghost/Desktop/launch.sh':{type:'file',content:'# simulation script\necho "NIGHTFALL ONLINE"\n'},
+      '/home/ghost/Documents/incident-report.txt':{type:'file',content:'INCIDENT 07B\nOperator reports a phantom login at 03:13.\nSource: localhost.\n'},
+      '/home/ghost/Documents/notes.txt':{type:'file',content:'Remember to rotate the prop password after the demo.\nClue: the final answer is not inside credentials.txt.\n'},
+      '/home/ghost/Documents/network-map.txt':{type:'file',content:'10.13.37.1  gateway\n10.13.37.7  blackice-node07\n10.13.37.9  silent-host\n'},
+      '/home/ghost/Downloads/payload.bin':{type:'file',content:'[binary payload simulated — 4096 bytes]\n'},
+      '/home/ghost/Downloads/old_keys.txt':{type:'file',content:'old-key-A: EXPIRED\nold-key-B: EXPIRED\n'},
+      '/home/ghost/vault/credentials.txt':{type:'file',content:'PROP CREDENTIALS — FICTIONAL\noperator: ghost\npassword: midnight-echo-731\nbackup_code: 9137-VOID\n'},
+      '/home/ghost/vault/keys.txt':{type:'file',content:'key_alpha = C0FFEE-731\nkey_beta  = 13-37-13\nstatus    = training-only\n'},
+      '/home/ghost/vault/do_not_open.txt':{type:'file',content:'PHRASE: THE CLOCK NEVER BLINKS AT 03:13\n\nIf you reached this file, you solved the first layer.\n'},
+      '/home/ghost/.bashrc':{type:'file',content:'alias ll="ls -la"\nalias cls="clear"\nexport PS1="\\u@\\h:\\w$ "\n'},
+      '/home/guest/readme.txt':{type:'file',content:'Guest account. Ask the operator before opening locked paths.\n'},
+      '/opt/blackice/core.dat':{type:'file',content:'CORE::GHOSTWIRE::7F-A1-92\n'},
+      '/opt/blackice/config.cfg':{type:'file',content:'AUDIO=CRT\nSCANLINES=TRUE\nRED_SHIFT=TRUE\n'},
+      '/opt/blackice/events.log':{type:'file',content:'22:01 login ghost\n22:04 command tree\n22:05 unknown process spawned\n'},
+      '/opt/tools/trace':{type:'file',content:'usage: trace <host>\n'},
+      '/opt/tools/decode':{type:'file',content:'usage: decode <file>\n'},
+      '/opt/tools/probe':{type:'file',content:'usage: probe <port>\n'},
+      '/tmp/session.lock':{type:'file',content:'LOCKED=FALSE\n'},
+      '/tmp/scratch.txt':{type:'file',content:'echoes in the machine...\n'},
+      '/var/log/auth.log':{type:'file',content:'Sep 26 22:01 blackice login[07]: ghost login accepted\nSep 26 22:03 sudo: ghost : TTY=pts/0 ; COMMAND=/usr/bin/tree\n'},
+      '/var/log/syslog':{type:'file',content:'kernel: virtual disk mounted\nblackice: glitch subsystem active\n'},
+      '/var/log/blackice.log':{type:'file',content:'[INFO] renderer initialized\n[WARN] unstable signal at frame 313\n'},
+      '/var/log/kern.log':{type:'file',content:'Sep 26 22:01:01 kernel: virtual tty0 attached\nSep 26 22:01:02 kernel: ghost0: 80G virtual disk online\nSep 26 22:01:02 kernel: packet filter loaded (simulation)\nSep 26 22:04:13 kernel: signal distortion interrupt handled\n'},
+      '/var/log/apt.log':{type:'file',content:'Sep 26 22:12 apt[404]: update started\nSep 26 22:12 apt[404]: blackice-core 7.13 available\nSep 26 22:12 apt[404]: package lists updated\n'}
+    },
+    processes:[
+      {pid:1,user:'root',stat:'Ss',cpu:'0.1',mem:'0.3',cmd:'/sbin/init ghostwire'},
+      {pid:73,user:'ghost',stat:'S+',cpu:'0.2',mem:'0.7',cmd:'bash'},
+      {pid:313,user:'ghost',stat:'S',cpu:'1.8',mem:'2.4',cmd:'/opt/blackice/core.dat'},
+      {pid:404,user:'root',stat:'S',cpu:'0.9',mem:'1.1',cmd:'glitchd --adaptive'},
+      {pid:512,user:'ghost',stat:'S',cpu:'0.4',mem:'0.8',cmd:'packetwatch --virtual'},
+      {pid:731,user:'ghost',stat:'S',cpu:'0.3',mem:'0.6',cmd:'logger --follow'}
+    ]
+  };
+
+  const commands = [
+    'alias','apt','awk','cmatrix','dmesg','basename','bash','bc','cat','cd','chmod','chown','clear','cmp','cp','curl','date','dd','df','diff','dirname','du','echo','env','exit','export','file','find','free','grep','head','history','hostname','htop','id','ip','iptables','jobs','journalctl','kill','less','ln','locate','ls','man','mkdir','more','mount','mv','nano','neofetch','nice','passwd','packets','permissions','ping','pkill','ps','pwd','readlink','reboot','reset','rm','rmdir','logs','sed','shutdown','sleep','sort','ssh','stat','strings','sudo','tail','tar','tee','test','time','touch','tree','uname','uniq','uptime','whoami','which','whereis','wc','xargs','yes'
+  ];
+
+  const filesForCompletion = () => Object.keys(state.fs).filter(p=>p.endsWith('.txt')||p.endsWith('.log')||p.endsWith('.cfg')||p.endsWith('.sh')||p.endsWith('.conf')||p.endsWith('.dat')).flatMap(p=>{
+    const base = p.slice(p.lastIndexOf('/')+1); return [base,p];
+  });
+
+  function ensureAudio(){
+    if(!state.audio) state.audio=new (window.AudioContext||window.webkitAudioContext)();
+    if(state.audio.state==='suspended') state.audio.resume();
+    return state.audio;
+  }
+  function noiseBurst(ctx, duration=.045, volume=.018, filterFreq=4200){
+    const buffer=ctx.createBuffer(1, Math.max(1,Math.floor(ctx.sampleRate*duration)), ctx.sampleRate);
+    const data=buffer.getChannelData(0);
+    for(let i=0;i<data.length;i++) data[i]=(Math.random()*2-1)*(1-i/data.length);
+    const src=ctx.createBufferSource(), filt=ctx.createBiquadFilter(), g=ctx.createGain();
+    filt.type='bandpass'; filt.frequency.value=filterFreq; filt.Q.value=.7;
+    g.gain.value=volume*1.65; src.buffer=buffer; src.connect(filt); filt.connect(g); g.connect(ctx.destination); src.start();
+    return src;
+  }
+  function beep(kind='key'){
+    try{
+      const ctx=ensureAudio(), now=ctx.currentTime;
+      const cfg={
+        key:[520,.025], enter:[150,.12], error:[92,.16], success:[760,.10],
+        type:[560,.018], tab:[720,.035], save:[320,.10], glitch:[68,.28], update:[220,.16], matrix:[110,.22], kill:[84,.12], packet:[340,.07]
+      }[kind]||[420,.03];
+      const o=ctx.createOscillator(), g=ctx.createGain();
+      o.type=kind==='glitch'?'sawtooth':(kind==='update'?'triangle':(kind==='matrix'?'sawtooth':(kind==='kill'?'square':(kind==='enter'?'triangle':'square'))));
+      o.frequency.setValueAtTime(cfg[0],now);
+      if(kind==='glitch'){
+        o.frequency.exponentialRampToValueAtTime(24,now+cfg[1]);
+        noiseBurst(ctx,.22,.075,1500);
+        noiseBurst(ctx,.12,.055,6200);
+      } else if(kind==='update'){ o.frequency.exponentialRampToValueAtTime(640,now+cfg[1]); noiseBurst(ctx,.09,.032,3200); }
+      else if(kind==='matrix'){ o.frequency.exponentialRampToValueAtTime(42,now+cfg[1]); noiseBurst(ctx,.18,.045,900); }
+      else if(kind==='kill'){ o.frequency.exponentialRampToValueAtTime(38,now+cfg[1]); }
+      else if(kind==='enter') o.frequency.exponentialRampToValueAtTime(72,now+cfg[1]);
+      else if(kind==='type') o.frequency.exponentialRampToValueAtTime(310,now+cfg[1]);
+      g.gain.setValueAtTime(.0001,now); g.gain.exponentialRampToValueAtTime(kind==='glitch'?.12:(kind==='update'?.095:(kind==='matrix'?.10:(kind==='kill'?.085:(kind==='type'?.055:(kind==='enter'?.075:.045))))),now+.003); g.gain.exponentialRampToValueAtTime(.0001,now+cfg[1]);
+      o.connect(g); g.connect(ctx.destination); o.start(); o.stop(now+cfg[1]+.02);
+      if(kind==='key'||kind==='type') noiseBurst(ctx,.016,.012,5000+Math.random()*2500);
+    }catch(e){}
+  }
+  function soundLabel(text){
+    const old=document.querySelector('.sound-pop'); if(old) old.remove();
+    const el=document.createElement('div'); el.className='sound-pop'; el.textContent='AUDIO // '+text; shell.appendChild(el); setTimeout(()=>el.remove(),500);
+  }
+
+  function absPath(p){
+    if(!p) return state.cwd;
+    if(p.startsWith('/')) return norm(p);
+    return norm(state.cwd+'/'+p);
+  }
+  function norm(p){
+    const parts=[]; for(const seg of p.split('/')){if(!seg||seg==='.')continue;if(seg==='..')parts.pop();else parts.push(seg)} return '/'+parts.join('/');
+  }
+  function getPath(p){return state.fs[absPath(p)]}
+  function childPaths(dir){return (state.fs[dir]?.children||[]).map(name=>norm(dir+'/'+name))}
+  function updateTree(){
+    const roots=['/home/ghost','/home/ghost/vault','/home/ghost/Documents','/etc','/var/log'];
+    const lines=[]; roots.forEach(root=>{
+      lines.push(`<span class="dir">${root}</span>`);
+      (state.fs[root]?.children||[]).forEach(n=>{
+        const p=norm(root+'/'+n), node=state.fs[p];
+        const cls=node?.type==='dir'?'dir':(p.includes('vault')||p.endsWith('shadow.txt')?'secret':'file');
+        lines.push(`<span class="${cls}"> ├─ ${n}${node?.type==='dir'?'/':''}</span>`);
+      });
+    });
+    if(treeEl) treeEl.innerHTML=lines.join('');
+  }
+  function write(text='', cls='out'){
+    const line=document.createElement('div');line.className='line '+cls;line.innerHTML=escapeHtml(text).replace(/\n/g,'<br>');screen.appendChild(line);scrollBottom();
+  }
+  function writeHTML(html, cls='out'){const line=document.createElement('div');line.className='line '+cls;line.innerHTML=html;screen.appendChild(line);scrollBottom()}
+  function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]))}
+  function scrollBottom(){screen.scrollTop=screen.scrollHeight}
+  function prompt(){
+    const old=screen.querySelector('.cmdline.active');
+    if(old) old.remove();
+    const row=document.createElement('div'); row.className='cmdline active';
+    const p=document.createElement('span');p.className='prompttext';p.textContent=`ghost@blackice:${state.cwd}$`;
+    row.appendChild(p);
+    const wrap=document.createElement('span'); wrap.id='inputWrap';
+    const measure=document.createElement('span'); measure.id='cursorMeasure'; measure.setAttribute('aria-hidden','true');
+    const cursor=document.createElement('span'); cursor.id='terminalCursor'; cursor.setAttribute('aria-hidden','true');
+    wrap.appendChild(measure); wrap.appendChild(cursor); wrap.appendChild(input); row.appendChild(wrap); screen.appendChild(row); updateCursor(); scrollBottom(); input.focus();
+  }
+
+  function updateCursor(){
+    const wrap=screen.querySelector('.cmdline.active #inputWrap'), measure=screen.querySelector('.cmdline.active #cursorMeasure'), cursor=screen.querySelector('.cmdline.active #terminalCursor');
+    if(!wrap||!measure||!cursor)return;
+    const pos=input.selectionStart ?? input.value.length;
+    measure.textContent=input.value.slice(0,pos).replace(/ /g,'\u00a0') || '';
+    const x=Math.min(measure.getBoundingClientRect().width, Math.max(0,wrap.clientWidth-.7*parseFloat(getComputedStyle(input).fontSize)));
+    cursor.style.left=x+'px';
+  }
+  function printPromptLine(cmd){writeHTML(`<span class="prompt">ghost@blackice:${escapeHtml(state.cwd)}$</span> <span class="out">${escapeHtml(cmd)}</span>`)}
+  function splitArgs(s){const r=[];let cur='',q=null;for(let i=0;i<s.length;i++){const c=s[i];if(q){if(c===q)q=null;else cur+=c}else if(c==='"'||c==="'"){q=c}else if(/\s/.test(c)){if(cur){r.push(cur);cur=''}}else cur+=c}if(cur)r.push(cur);return r}
+
+  function listDir(target, all=false, long=false){
+    const dir=absPath(target||state.cwd); if(!state.fs[dir]||state.fs[dir].type!=='dir'){write(`ls: cannot access '${target}': No such file or directory`,'err');return}
+    let names=[...(state.fs[dir].children||[])]; if(all && !names.includes('.bashrc') && dir==='/home/ghost'){};
+    if(long){names.forEach(n=>{const node=state.fs[norm(dir+'/'+n)];write(`${node?.type==='dir'?'drwxr-xr-x':'-rw-r--r--'} 1 ${node?.type==='dir'?'root':'ghost'} ghost ${String((node?.content||'').length).padStart(5,' ')} Sep 26 22:1${Math.floor(Math.random()*9)} ${n}${node?.type==='dir'?'/':''}`,'out')})}
+    else write(names.map(n=>state.fs[norm(dir+'/'+n)]?.type==='dir'?n+'/':n).join('  '),'out');
+  }
+
+  function tree(dir=state.cwd, prefix=''){
+    const node=state.fs[dir]; if(!node){write(`tree: '${dir}': No such file or directory`,'err');return}
+    write(dir,'info');
+    const children=node.children||[];
+    children.forEach((n,i)=>{const last=i===children.length-1;const p=norm(dir+'/'+n);write(prefix+(last?'└── ':'├── ')+n+(state.fs[p]?.type==='dir'?'/':''));if(state.fs[p]?.type==='dir') treeCompact(p,prefix+(last?'    ':'│   '));});
+  }
+  function treeCompact(dir,prefix){const children=state.fs[dir]?.children||[];children.forEach((n,i)=>{const last=i===children.length-1;const p=norm(dir+'/'+n);write(prefix+(last?'└── ':'├── ')+n+(state.fs[p]?.type==='dir'?'/':''));if(state.fs[p]?.type==='dir')treeCompact(p,prefix+(last?'    ':'│   '))})}
+
+  function openEditor(path){
+    const p=absPath(path||'scratch.txt');
+    let node=state.fs[p];
+    if(!node){
+      const parent=p.slice(0,p.lastIndexOf('/'))||'/';
+      if(!state.fs[parent]||state.fs[parent].type!=='dir'){write(`nano: ${path}: No such file or directory`,'err');return}
+      node={type:'file',content:''}; state.fs[p]=node; state.fs[parent].children.push(p.slice(p.lastIndexOf('/')+1));
+    }
+    if(node.type!=='file'){write(`nano: ${path}: Is a directory`,'err');return}
+    if(state.editor) state.editor.remove();
+    const ov=document.createElement('div'); ov.className='editor-overlay';
+    const bar=document.createElement('div'); bar.className='editor-bar'; bar.innerHTML=`<span>GNU nano 5.9 // BLACK//ICE</span><span>${escapeHtml(p)}</span>`;
+    const ta=document.createElement('textarea'); ta.className='editor-text'; ta.spellcheck=false; ta.value=node.content;
+    const foot=document.createElement('div'); foot.className='editor-foot'; foot.textContent='^S SAVE    ^X EXIT    ^W FIND    // browser simulation';
+    ov.append(bar,ta,foot); shell.appendChild(ov); state.editor={overlay:ov,textarea:ta,path:p}; input.style.visibility='hidden'; beep('type'); soundLabel('EDITOR ONLINE'); ta.focus();
+    const save=()=>{node.content=ta.value;beep('save');soundLabel('FILE SAVED');write(`nano: wrote ${ta.value.length} bytes to ${p}`,'dim');close();};
+    const close=()=>{if(!state.editor)return;state.editor.overlay.remove();state.editor=null;input.style.visibility='visible';prompt();};
+    ov.addEventListener('keydown',e=>{if(e.ctrlKey&&e.key.toLowerCase()==='s'){e.preventDefault();save()}else if(e.ctrlKey&&e.key.toLowerCase()==='x'){e.preventDefault();close()}else if(e.key.length===1&&!e.ctrlKey&&!e.metaKey)beep('type')});
+    ta.addEventListener('keydown',e=>{if(e.key==='Tab'){e.preventDefault();const a=ta.selectionStart,b=ta.selectionEnd;ta.setRangeText('  ',a,b,'end')}});
+  }
+  function startMatrix(){
+    if(state.matrix)return;
+    const ov=document.createElement('div'); ov.className='matrix-overlay';
+    const cv=document.createElement('canvas'); cv.className='matrix-canvas';
+    const hud=document.createElement('div'); hud.className='matrix-hud'; hud.innerHTML='<span>CMATRIX // SIGNAL STREAM</span><span>BLACK//ICE</span>';
+    const exit=document.createElement('div'); exit.className='matrix-exit'; exit.textContent='PRESS ANY KEY TO EXIT';
+    ov.append(cv,hud,exit); shell.appendChild(ov); state.matrix={overlay:ov,canvas:cv}; input.style.visibility='hidden'; beep('matrix'); noiseBurst(ensureAudio(),.16,.05,700); soundLabel('MATRIX STREAM');
+    const ctx=cv.getContext('2d'); const chars='01ABCDEFGHIJKLMNOPQRSTUVWXYZ#$%&@<>[]{}/*+-'; let cols=[],drops=[]; let raf=0;
+    const resize=()=>{const r=ov.getBoundingClientRect(),dpr=Math.min(devicePixelRatio||1,2);cv.width=Math.floor(r.width*dpr);cv.height=Math.floor(r.height*dpr);cv.style.width=r.width+'px';cv.style.height=r.height+'px';ctx.setTransform(dpr,0,0,dpr,0,0);const n=Math.floor(r.width/12);cols=Array.from({length:n},(_,i)=>i*12);drops=cols.map(()=>Math.random()*-30)};
+    resize(); addEventListener('resize',resize);
+    const draw=()=>{if(!state.matrix)return;const r=ov.getBoundingClientRect();ctx.fillStyle='rgba(0,0,0,.17)';ctx.fillRect(0,0,r.width,r.height);ctx.font='12px Courier New';for(let i=0;i<cols.length;i++){const x=cols[i],y=drops[i]*12;ctx.fillStyle=Math.random()<.06?'#e0ffe3':'#35ff55';ctx.fillText(chars[(Math.random()*chars.length)|0],x,y);if(y>r.height&&Math.random()>.975)drops[i]=0;drops[i]+=1}raf=requestAnimationFrame(draw)}; draw();
+    const stop=()=>{if(!state.matrix)return;cancelAnimationFrame(raf);removeEventListener('resize',resize);ov.remove();state.matrix=null;input.style.visibility='visible';beep('key');soundLabel('MATRIX EXIT');prompt();};
+    ov.addEventListener('click',stop); ov.addEventListener('keydown',stop); setTimeout(()=>ov.tabIndex=0,0); ov.focus();
+    state.matrix.stop=stop;
+  }
+
+  function queueTimer(fn, ms){ const id=setTimeout(fn,ms); state.pendingTimers.push(id); return id; }
+  function clearPendingJob(){ state.pendingTimers.forEach(clearTimeout); state.pendingTimers=[]; state.pendingJob=null; }
+  function finishJob(){ state.pendingTimers=[]; state.pendingJob=null; if(!state.matrix && !state.editor){ beep('key'); prompt(); } }
+  function processList(){ return state.processes.map(p=>`${String(p.pid).padStart(4,' ')} ${p.user.padEnd(7,' ')} ${p.stat.padEnd(3,' ')} ${p.cpu.padStart(4,' ')}% ${p.mem.padStart(4,' ')}% ${p.cmd}`).join('\n'); }
+  function startHtop(){
+    if(state.htop)return;
+    const ov=document.createElement('div'); ov.className='htop-overlay';
+    const head=document.createElement('div'); head.className='htop-head'; head.innerHTML='<span>htop 3.2.2 // BLACK//ICE</span><span>F10 QUIT</span>';
+    const meter=document.createElement('div'); meter.className='htop-meter';
+    const table=document.createElement('div'); table.className='htop-table';
+    const foot=document.createElement('div'); foot.className='htop-foot'; foot.textContent='F1 Help  F2 Setup  F3 Search  F5 Tree  F6 Sort  F9 Kill  F10 Quit  // simulation';
+    ov.append(head,meter,table,foot); shell.appendChild(ov); state.htop={overlay:ov}; input.style.visibility='hidden'; beep('matrix'); soundLabel('HTOP ONLINE');
+    const draw=()=>{ if(!state.htop)return; const cpu=(7+Math.random()*8).toFixed(1), mem=(28+Math.random()*4).toFixed(1); meter.textContent=`CPU [${'|'.repeat(Math.round(cpu/2))}${' '.repeat(50-Math.round(cpu/2))}] ${cpu}%   MEM [${'|'.repeat(Math.round(mem/2))}${' '.repeat(50-Math.round(mem/2))}] ${mem}%`; table.textContent='PID  USER    S   CPU  MEM  COMMAND\n'+processList(); state.htop.raf=requestAnimationFrame(draw); };
+    draw();
+    const stop=()=>{if(!state.htop)return;cancelAnimationFrame(state.htop.raf);ov.remove();state.htop=null;input.style.visibility='visible';beep('kill');soundLabel('HTOP EXIT');prompt();};
+    ov.addEventListener('click',stop); ov.addEventListener('keydown',e=>{e.preventDefault();stop()}); ov.tabIndex=0; ov.focus(); state.htop.stop=stop;
+  }
+  function detailedLogs(){
+    write('JOURNAL // BLACK//ICE NODE 07','info');
+    write('Sep 26 22:01:01 kernel: virtual tty0 attached');
+    write('Sep 26 22:01:02 systemd[1]: Started BLACK//ICE ghostwire shell.');
+    write('Sep 26 22:01:02 kernel: ghost0: 80G virtual disk online');
+    write('Sep 26 22:02:17 sshd[211]: Accepted simulation key for ghost');
+    write('Sep 26 22:03:41 sudo[233]: ghost : COMMAND=/usr/bin/tree');
+    write('Sep 26 22:04:13 kernel: packet filter loaded (simulation)');
+    write('Sep 26 22:05:09 glitchd[404]: signal integrity 87%');
+    write('Sep 26 22:07:32 auth[501]: session opened for ghost(uid=1000)');
+    write('Sep 26 22:12:00 apt[404]: package lists updated');
+    write('Sep 26 22:14:44 logger[731]: virtual packet stream active');
+    write('Sep 26 22:17:03 kernel: signal distortion interrupt handled');
+  }
+  function permissionsReport(){
+    write('SYSTEM PERMISSIONS // SIMULATED','info');
+    write('PATH                                      OWNER      GROUP      MODE       ACL');
+    write('/                                         root       root       drwxr-xr-x  system');
+    write('/etc                                      root       root       drwxr-xr-x  system');
+    write('/etc/passwd                                root       root       -rw-r--r--  readable');
+    write('/etc/shadow.txt                            root       shadow     -rw-r-----  protected');
+    write('/home/ghost                                ghost      ghost      drwx------  private');
+    write('/home/ghost/vault                          ghost      operators  drwx------  private');
+    write('/var/log                                   root       adm        drwxr-x---  logread');
+    write('/opt/blackice                              root       operators  drwxr-x---  operator');
+    write('CAPABILITIES: ghost=uid1000,gid1000,groups=[sudo,operators]');
+    write('SUID: /usr/bin/passwd /usr/bin/su [simulated]');
+  }
+  function run(raw){
+    raw=raw.trim(); if(!raw)return prompt();
+    if(raw.startsWith('sudo ')){raw='sudo '+raw.slice(5).trim()}
+    const args=splitArgs(raw), cmd=args[0].toLowerCase(), rest=args.slice(1);
+    const active=screen.querySelector('.cmdline.active'); if(active) active.remove();
+    printPromptLine(raw); input.value='';
+    beep('enter'); soundLabel('COMMAND');
+    switch(cmd){
+      case 'help': case '?':
+        write('BLACK//ICE command index','info');
+        write('Filesystem: ls cd pwd tree cat touch mkdir rm rmdir cp mv find grep head tail less file stat du df');
+        write('Shell: echo clear history whoami hostname uname date env export alias which whereis test time sleep');
+        write('System: ps top htop uptime free jobs kill pkill id chmod chown getfacl namei passwd mount reboot shutdown');
+        write('Diagnostics: ip iptables ss journalctl dmesg logs packets permissions');
+        write('Network (simulated): ping ssh curl wget nc ss ip');
+        write('Utilities: tar sed awk sort uniq wc xargs strings basename dirname readlink cmp diff bc yes man neofetch nano cmatrix');
+        write('Special: `glitch` intensifies visual corruption. Everything runs in this browser sandbox.','dim');
+        break;
+      case 'pwd': write(state.cwd); break;
+      case 'cd': {
+        const dest=rest[0]||'/home/ghost', p=absPath(dest); if(p==='/'||state.fs[p]?.type==='dir')state.cwd=p;else write(`cd: no such file or directory: ${dest}`,'err');
+        break;
+      }
+      case 'ls': listDir(rest.find(a=>!a.startsWith('-'))||state.cwd, rest.some(a=>a.includes('a')), rest.some(a=>a.includes('l'))); break;
+      case 'tree': tree(absPath(rest[0]||state.cwd)); break;
+      case 'cat': {
+        if(!rest.length){write('cat: missing operand','err');break} rest.forEach(arg=>{const p=absPath(arg),n=state.fs[p];if(n?.type==='file')write(n.content);else if(n?.type==='dir')write(`cat: ${arg}: Is a directory`,'err');else write(`cat: ${arg}: No such file or directory`,'err')}); break;
+      }
+      case 'head': case 'tail': {
+        const p=absPath(rest[rest.length-1]||''); const n=state.fs[p];if(!n||n.type!=='file'){write(`${cmd}: ${rest[0]||''}: No such file or directory`,'err');break}const lines=n.content.trimEnd().split('\n');write((cmd==='head'?lines.slice(0,10):lines.slice(-10)).join('\n'));break;
+      }
+      case 'touch': {
+        rest.filter(x=>!x.startsWith('-')).forEach(name=>{const p=absPath(name);if(state.fs[p])return;const parent=p.slice(0,p.lastIndexOf('/'))||'/';if(!state.fs[parent]||state.fs[parent].type!=='dir'){write(`touch: cannot touch '${name}': No such file or directory`,'err');return}state.fs[p]={type:'file',content:''};state.fs[parent].children.push(p.slice(p.lastIndexOf('/')+1));});updateTree();break;
+      }
+      case 'mkdir': {
+        const recursive=rest.includes('-p');rest.filter(x=>!x.startsWith('-')).forEach(name=>{const p=absPath(name),parent=p.slice(0,p.lastIndexOf('/'))||'/';if(state.fs[p]){write(`mkdir: cannot create directory '${name}': File exists`,'err');return}if(!state.fs[parent]&&!recursive){write(`mkdir: cannot create directory '${name}': No such file or directory`,'err');return}if(!state.fs[parent]||state.fs[parent].type!=='dir'){write(`mkdir: parent not found`,'err');return}state.fs[p]={type:'dir',children:[]};state.fs[parent].children.push(p.slice(p.lastIndexOf('/')+1));});updateTree();break;
+      }
+      case 'rm': {
+        const recursive=rest.includes('-r')||rest.includes('-rf');rest.filter(x=>!x.startsWith('-')).forEach(name=>{const p=absPath(name),n=state.fs[p];if(!n){write(`rm: cannot remove '${name}': No such file or directory`,'err');return}if(n.type==='dir'&&!recursive){write(`rm: cannot remove '${name}': Is a directory`,'err');return}deleteRecursive(p);});updateTree();break;
+      }
+      case 'rmdir': {rest.forEach(name=>{const p=absPath(name),n=state.fs[p];if(!n)write(`rmdir: failed to remove '${name}': No such file or directory`,'err');else if(n.type!=='dir'||(n.children||[]).length)write(`rmdir: failed to remove '${name}': Directory not empty`,'err');else deleteRecursive(p)});updateTree();break;}
+      case 'cp': case 'mv': write(`${cmd}: simulation complete — no data leaves the browser`,'dim'); break;
+      case 'echo': {
+        const text=rest.join(' ').replace(/\\n/g,'\n'); write(text.replace(/^\$(USER|HOME|PWD)$/,m=>m==='$USER'?'ghost':m==='$HOME'?'/home/ghost':state.cwd));break;
+      }
+      case 'clear': screen.innerHTML='';prompt();break;
+      case 'reset': screen.innerHTML='';boot(true);break;
+      case 'history': state.history.forEach((h,i)=>write(`${String(i+1).padStart(3,' ')}  ${h}`,'dim'));break;
+      case 'whoami':write('ghost');break;
+      case 'id':write('uid=1000(ghost) gid=1000(ghost) groups=1000(ghost),27(sudo),113(operators)');break;
+      case 'hostname':write('blackice-node07');break;
+      case 'uname':write(rest.includes('-a')?'Linux blackice-node07 5.19.13-bi #13 SMP PREEMPT x86_64 GNU/Linux':'Linux');break;
+      case 'date':write(new Date().toString());break;
+      case 'uptime':write('22:17:42 up 3 days, 07:13, 1 user, load average: 0.07, 0.13, 0.09');break;
+      case 'free':write('               total        used        free      shared  buff/cache   available\nMem:            7.7Gi       2.1Gi       3.9Gi       0.2Gi       1.7Gi       5.3Gi\nSwap:           2.0Gi       0.0Gi       2.0Gi');break;
+      case 'df':write('Filesystem      Size  Used Avail Use% Mounted on\n/dev/ghost0     80G   31G   45G  41% /\ntmpfs           3.8G  12M  3.8G   1% /tmp');break;
+      case 'ps': write('PID   USER     STAT   %CPU  %MEM  COMMAND\n'+processList());break;
+      case 'top': startHtop(); break;
+      case 'htop': startHtop(); break;
+      case 'kill': case 'pkill': { const target=rest.find(x=>/^\d+$/.test(x))||''; const sig=rest.find(x=>x.startsWith('-'))||'-TERM'; if(!target){write(`${cmd}: usage ${cmd} ${sig} <pid>`,'err');break;} const idx=state.processes.findIndex(p=>String(p.pid)===target); if(idx<0){write(`${cmd}: (${target}) - No such process`,'err');break;} if(target==='1'){write('kill: Operation not permitted (PID 1 is protected in the simulation)','err');break;} const dead=state.processes.splice(idx,1)[0]; beep('kill'); soundLabel('PROCESS TERMINATED'); write(`${cmd}: ${sig} ${target} (${dead.cmd}) — process terminated in simulation`,'warn'); break; }
+      case 'ip': {
+        const sub=rest[0]||'addr';
+        if(sub==='addr'||sub==='a'){write('1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536\n    inet 127.0.0.1/8 scope host lo\n2: ghost0: <BROADCAST,UP,LOWER_UP> mtu 1500\n    inet 10.13.37.7/24 brd 10.13.37.255 scope global ghost0');}
+        else if(sub==='link'){write('1: lo: mtu 65536 state UP\n2: ghost0: mtu 1500 state UP qdisc virtual');}
+        else if(sub==='route'||sub==='r'){write('default via 10.13.37.1 dev ghost0\n10.13.37.0/24 dev ghost0 proto kernel scope link');}
+        else if(sub==='-s' || sub==='stats'){beep('packet');soundLabel('PACKET COUNTERS');write('ghost0: RX  18,431 packets  1.82 MiB  errors 0  dropped 2\n         TX  15,902 packets  1.41 MiB  errors 0  dropped 0\nlo:     RX   2,140 packets  0.31 MiB  errors 0  dropped 0\n         TX   2,140 packets  0.31 MiB  errors 0  dropped 0');}
+        else if(sub==='packets'){beep('packet');soundLabel('PACKET VIEW');write('PACKET VIEW // ghost0\nTIME       SRC            DST            PROTO  LEN  STATE\n22:17:01   10.13.37.7     10.13.37.1    UDP    84   RX\n22:17:02   10.13.37.1     10.13.37.7    TCP    512  TX\n22:17:03   10.13.37.9     10.13.37.7    ICMP   84   RX\n22:17:04   10.13.37.7     10.13.37.9    TCP    128  TX\n[simulation] no real packets are captured.');}
+        else write('Usage: ip addr | ip link | ip route | ip -s link | ip packets','dim'); break; }
+      case 'ss': write('Netid State  Local Address:Port  Peer Address:Port\ntcp   LISTEN  10.13.37.7:22      0.0.0.0:*\ntcp   ESTAB   10.13.37.7:31337   10.13.37.9:51822\nudp   UNCONN  10.13.37.7:514     0.0.0.0:*'); break;
+      case 'journalctl': case 'logs': case 'dmesg': detailedLogs(); break;
+      case 'permissions': case 'getfacl': case 'namei': permissionsReport(); break;
+      case 'iptables': write('Chain INPUT (policy ACCEPT)\nnum  target  prot source      destination\n1    ACCEPT  all  10.13.37.0/24  0.0.0.0/0\n2    ACCEPT  tcp  0.0.0.0/0     10.13.37.7 tcp dpt:22\n[simulation] packet filtering is visual only.'); break;
+      case 'neofetch':
+        writeHTML(`<span class="info">      ██████  ██████</span>  ghost@blackice<br><span class="info">    ██      ██    ██</span>  ----------------<br><span class="info">  ██   ◼◼   ██    ██</span>  OS: BLACK//ICE Linux 7.13<br><span class="info">  ██        ██    ██</span>  Kernel: 5.19.13-bi<br><span class="info">    ██    ██      </span>  Shell: bash 5.2<br><span class="info">      ████████████</span>  Theme: CRT_GHOST<br>                           Terminal: blackice-tty<br>                           Node: 07 / SIMULATION`);
+        break;
+      case 'nano': case 'pico': openEditor(rest[0]||'scratch.txt'); break;
+      case 'cmatrix': startMatrix(); break;
+      case 'find': {
+        const root=absPath(rest.find(x=>!x.startsWith('-'))||'.'); const pattern=(rest.find(x=>x==='-name')?rest[rest.indexOf('-name')+1]:null)||'*'; const matches=Object.keys(state.fs).filter(p=>p.startsWith(root.endsWith('/')?root:root+'/')||p===root).filter(p=>glob(pattern,p.split('/').pop()||''));write(matches.join('\n')||'','out');break;
+      }
+      case 'grep': {
+        const file=rest[rest.length-1], needle=rest.filter(x=>x!==file&&!x.startsWith('-')).join(' ');const n=state.fs[absPath(file)];if(!n){write(`grep: ${file}: No such file or directory`,'err');break}write(n.content.split('\n').filter(l=>l.toLowerCase().includes(needle.toLowerCase())).join('\n'));break;
+      }
+      case 'wc': {const p=absPath(rest[rest.length-1]||'');const n=state.fs[p];if(!n||n.type!=='file'){write(`wc: ${rest[0]||''}: No such file or directory`,'err');break}write(`  ${n.content.split('\n').length-1}  ${n.content.split(/\s+/).filter(Boolean).length}  ${n.content.length} ${rest[rest.length-1]}`);break;}
+      case 'which': write((commands.includes(rest[0])?`/usr/bin/${rest[0]}`:`which: no ${rest[0]} in (/usr/local/bin:/usr/bin:/bin)`));break;
+      case 'whereis': write(`${rest[0]}: /usr/bin/${rest[0]} /usr/share/man/man1/${rest[0]}.1`);break;
+      case 'man': write(`MANUAL PAGE — ${rest[0]||'intro'}\n\nThis simulated shell implements a safe visual subset of common Linux commands.\nTry: man ls, man grep, man find, man chmod`,'info');break;
+      case 'chmod': case 'chown': write(`${cmd}: permissions updated in simulated environment`,'dim');break;
+      case 'passwd': beep('success');write('Changing password for ghost.','info');write('New password: ********');write('Retype new password: ********');write('passwd: password updated successfully (simulation)','out');break;
+      case 'sudo': {
+        if(rest[0]==='apt' && rest[1]==='update') {
+          state.pendingJob='apt'; beep('update'); write('[sudo] password for ghost: ********','warn'); write('Authentication accepted (simulation).','dim');
+          const pkgs=['blackice-core','ghostwire-shell','crt-utils','matrix-tools','retro-ui'];
+          pkgs.forEach((pkg,i)=>queueTimer(()=>{beep('update');write(`Get:${String(i+1).padStart(2,' ')} https://packages.blackice.invalid/ ${pkg} [simulated]`,'out')},220*i));
+          queueTimer(()=>write('Fetched 0 B in 0s (0 B/s)','dim'),1100);
+          queueTimer(()=>write('Reading package lists... Done','info'),1300);
+          queueTimer(()=>{write('All packages are up to date.','info'); write('ghost@blackice: update complete.','dim'); finishJob();},1500);
+        } else {write(`[sudo] password for ghost: ********`,'warn'); write('Authentication accepted (simulation). No privilege escalation occurs outside this browser.','dim')}
+        break;
+      }
+      case 'apt': {
+        if(rest[0]==='update') {
+          state.pendingJob='apt'; beep('update'); write('Hit:1 blackice://virtual-repository stable InRelease','out');
+          queueTimer(()=>{beep('update');write('Get:1 blackice-core [simulated]','out')},260);
+          queueTimer(()=>{beep('update');write('Get:2 ghostwire-shell [simulated]','out')},520);
+          queueTimer(()=>write('Reading package lists... Done','info'),900);
+          queueTimer(()=>{write('All packages are up to date.','info'); write('ghost@blackice: update complete.','dim'); finishJob();},1200);
+        } else write('apt: simulated package manager\nUsage: sudo apt update\nNo packages were changed.','dim');
+        break;
+      }
+      case 'ping': {const host=rest[0]||'127.0.0.1';write(`PING ${host} (${host}) 56(84) bytes of data.`);setTimeout(()=>{write(`64 bytes from ${host}: icmp_seq=1 ttl=64 time=0.037 ms`);write(`64 bytes from ${host}: icmp_seq=2 ttl=64 time=0.041 ms`);},180);break;}
+      case 'ssh': write('ssh: simulated connection established to the virtual network.\nNo real network traffic is generated.','info');break;
+      case 'curl': case 'wget': write(`${cmd}: fetched 0 bytes — external network access is disabled in this demo.`,'dim');break;
+      case 'glitch': triggerGlitch(1200); write('GLITCH//ENGINE — intensity raised.','warn'); break;
+      case 'sleep': write(`sleep: ${rest[0]||'1'}s (simulated)`,'dim');break;
+      case 'yes': for(let i=0;i<6;i++)write(rest.join(' ')||'y');break;
+      case 'exit': write('Session retained for the demo. Use the browser to close the terminal.','warn');break;
+      default:
+        if(commands.includes(cmd)) write(`${cmd}: command simulated — output omitted by design`,'dim');
+        else {beep('error');write(`${cmd}: command not found. Type 'help' for a command index.`,'err');triggerGlitch(260)}
+    }
+    if(raw && state.history[state.history.length-1]!==raw){state.history.push(raw);if(state.history.length>100)state.history.shift()} state.histIndex=state.history.length;
+    if(!['clear','reset'].includes(cmd) && !state.matrix && !state.editor && !state.pendingJob)prompt(); else if(!state.matrix && !state.editor && !state.pendingJob)input.focus();
+  }
+  function deleteRecursive(p){const n=state.fs[p];if(!n)return;if(n.type==='dir')for(const child of [...(n.children||[])])deleteRecursive(norm(p+'/'+child));const par=p.slice(0,p.lastIndexOf('/'))||'/';if(state.fs[par]?.children)state.fs[par].children=state.fs[par].children.filter(x=>x!==p.slice(p.lastIndexOf('/')+1));delete state.fs[p]}
+  function glob(pattern, name){if(pattern==='*')return true;const re=new RegExp('^'+pattern.replace(/[.+^${}()|[\]\\]/g,'\\$&').replace(/\*/g,'.*').replace(/\?/g,'.')+'$');return re.test(name)}
+  function triggerGlitch(ms=500){shell.classList.add('glitch','retro-hit');beep('glitch');soundLabel('SIGNAL DISTORTION');clearTimeout(state.glitchTimer);if(signalTear){signalTear.style.setProperty('--tear-top',(10+Math.random()*75).toFixed(1)+'%');signalTear.classList.add('active')}clearTimeout(state.glitchTimer);state.glitchTimer=setTimeout(()=>{shell.classList.remove('glitch','retro-hit');signalTear?.classList.remove('active')},ms)}
+  function boot(skip=false){
+    input.remove();
+    if(!skip){
+      writeHTML('<span class="boot-logo">BLACK//ICE // GHOSTWIRE TERMINAL</span>','out');
+      write('[ OK ] mounting virtual root filesystem');
+      write('[ OK ] loading operator profile: ghost');
+      write('[ OK ] initializing CRT compositor');
+      write('[ OK ] audio synth armed');
+      write('[WARN] signal integrity: 87% — visual artifacts expected','warn');
+      write('');
+      write('Welcome to the NIGHTFALL training node. Type `help` to begin.','info');
+    } else {write('terminal reset. session state preserved.','dim')}
+    screen.appendChild(input);prompt();
+  }
+
+  input.addEventListener('input',updateCursor);
+  input.addEventListener('keyup',updateCursor);
+  input.addEventListener('click',updateCursor);
+  input.addEventListener('keydown',e=>{
+    if(state.matrix){e.preventDefault();state.matrix.stop();return}
+    if(state.editor)return;
+    if(e.key==='c'&&e.ctrlKey){
+      e.preventDefault();
+      if(state.pendingJob){ clearPendingJob(); beep('kill'); soundLabel('JOB INTERRUPTED'); write('^C','warn'); write('operation interrupted.','err'); prompt(); return; }
+      write('^C','warn'); beep('kill'); input.value=''; updateCursor(); return;
+    }
+    if(e.key==='Enter'){run(input.value);return}
+    if(e.key==='ArrowUp'){e.preventDefault();if(!state.history.length)return;state.histIndex=Math.max(0,state.histIndex-1);input.value=state.history[state.histIndex]||'';requestAnimationFrame(updateCursor)}
+    if(e.key==='ArrowDown'){e.preventDefault();state.histIndex=Math.min(state.history.length,state.histIndex+1);input.value=state.history[state.histIndex]||'';requestAnimationFrame(updateCursor)}
+    if(e.key==='Tab'){e.preventDefault();const v=input.value;const parts=v.split(/\s+/);const token=parts[parts.length-1];if(parts.length===1){const opts=commands.filter(c=>c.startsWith(token));if(opts.length===1){input.value=opts[0]+' ';requestAnimationFrame(updateCursor)}else if(opts.length>1){write(opts.join('  '),'dim');beep('key')}}else{const opts=filesForCompletion().filter(c=>c.startsWith(token));if(opts.length===1){parts[parts.length-1]=opts[0];input.value=parts.join(' ');requestAnimationFrame(updateCursor)}}}
+    if(e.key==='l'&&e.ctrlKey){e.preventDefault();screen.innerHTML='';prompt()}
+    if(e.key==='k'&&e.ctrlKey){e.preventDefault();triggerGlitch(1400)}
+    if(e.key.length===1 && !e.ctrlKey && !e.metaKey){beep('type');soundLabel('KEY CLICK')}
+  });
+  document.addEventListener('click',()=>input.focus());
+  function mildSignalDistortion(){
+    if(document.hidden)return;
+    shell.classList.remove('signal-distort','retro-hit');
+    void shell.offsetWidth;
+    shell.classList.add('signal-distort','retro-hit');
+    if(signalTear){signalTear.style.setProperty('--tear-top',(20+Math.random()*62).toFixed(1)+'%');signalTear.classList.remove('active');void signalTear.offsetWidth;signalTear.classList.add('active');}
+    setTimeout(()=>{shell.classList.remove('signal-distort','retro-hit');signalTear?.classList.remove('active')},380);
+    setTimeout(mildSignalDistortion,2600+Math.random()*4200);
+  }
+  setTimeout(mildSignalDistortion,1800+Math.random()*1800);
+
+  updateTree();boot();
+})();
+</script>
+<canvas id="staticCanvas" aria-hidden="true"></canvas>
+<style>
+#staticCanvas{position:fixed;inset:0;width:100%;height:100%;z-index:79;pointer-events:none;opacity:.018;mix-blend-mode:screen;image-rendering:pixelated;transition:opacity .08s steps(2,end);}
+#staticCanvas.static-burst{opacity:.32;animation:tvStaticBurst .48s steps(4,end) both;}
+@keyframes tvStaticBurst{0%{opacity:.03;filter:contrast(1)}12%{opacity:.38;filter:contrast(1.8)}35%{opacity:.25;filter:contrast(1.35)}55%{opacity:.44;filter:contrast(2.2)}78%{opacity:.18;filter:contrast(1.2)}100%{opacity:.03;filter:contrast(1)}}
+</style>
+<script>
+(()=>{
+  const c=document.getElementById('staticCanvas'),x=c.getContext('2d',{alpha:true});
+  let w=0,h=0,burstTimer;
+  function size(){w=c.width=Math.max(320,Math.floor(innerWidth/2));h=c.height=Math.max(180,Math.floor(innerHeight/2));}
+  function noise(){
+    if(!w||!h)return;
+    const im=x.createImageData(w,h),d=im.data;
+    const burst=c.classList.contains('static-burst');
+    for(let i=0;i<d.length;i+=4){
+      const v=Math.random()*255|0;
+      const grain=burst ? (Math.random()*90|0) : (Math.random()*18|0);
+      d[i]=Math.min(170,v*.60+grain*.12);
+      d[i+1]=Math.min(255,v+grain);
+      d[i+2]=Math.min(170,v*.60+grain*.10);
+      d[i+3]=burst ? ((Math.random()*95)|0) : ((Math.random()*8)|0);
+    }
+    x.putImageData(im,0,0);
+    // occasional horizontal interference bands, like an old TV losing signal
+    if(burst){
+      const bands=2+Math.random()*4|0;
+      for(let i=0;i<bands;i++){
+        const y=Math.random()*h|0, bh=1+Math.random()*7|0;
+        x.fillStyle=`rgba(190,255,195,${(.05+Math.random()*.16).toFixed(2)})`;
+        x.fillRect(0,y,w,bh);
+        if(Math.random()<.65){
+          x.fillStyle='rgba(0,0,0,.12)';
+          x.fillRect((Math.random()*w*.35)|0,y,w*.65,bh+1);
+        }
+      }
+    }
+    requestAnimationFrame(noise);
+  }
+  function staticBurst(){
+    c.classList.remove('static-burst');
+    void c.offsetWidth;
+    c.classList.add('static-burst');
+    clearTimeout(burstTimer);
+    burstTimer=setTimeout(()=>c.classList.remove('static-burst'),520+Math.random()*260);
+    // keep bursts frequent but unpredictable: roughly every 4–7 seconds
+    setTimeout(staticBurst,3900+Math.random()*3200);
+  }
+  addEventListener('resize',size,{passive:true});
+  size();
+  noise();
+  setTimeout(staticBurst,2200);
+})();
+</script>
+</body>
+</html>

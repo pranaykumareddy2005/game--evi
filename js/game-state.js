@@ -1,0 +1,492 @@
+/**
+ * NEXORA: THE ECHO PROTOCOL
+ * game-state.js — Central game state, timer, notifications, cross-team chat
+ * ============================================================
+ */
+
+const NEXORA = (() => {
+
+  // ── GAME STATE ──────────────────────────────────────────────
+  const state = {
+    started:       false,
+    currentRole:   'tech',
+    elapsedSeconds: 0,
+    totalSeconds:  180 * 60,           // 3 hours
+    chatMessages:  [],
+    notifications: [],
+    evidenceFound: new Set(),
+    unlockedFiles: new Set(),
+    phase:         1,                  // 1–5 acts
+    cluesShared:   {},
+    terminalHistory: [],
+    terminalHistoryIndex: -1,
+    timerInterval: null,
+  };
+
+  // ── PERSISTENCE ─────────────────────────────────────────────
+  function saveState() {
+    if (!state.started) return;
+    const data = {
+      elapsedSeconds: state.elapsedSeconds,
+      phase: state.phase,
+      evidenceFound: Array.from(state.evidenceFound),
+      unlockedFiles: Array.from(state.unlockedFiles),
+      chatMessages: state.chatMessages,
+      currentRole: state.currentRole,
+      started: state.started
+    };
+    localStorage.setItem('nexora_save', JSON.stringify(data));
+  }
+
+  function loadState() {
+    try {
+      const data = JSON.parse(localStorage.getItem('nexora_save'));
+      if (data && data.started) {
+        state.elapsedSeconds = data.elapsedSeconds || 0;
+        state.phase = data.phase || 1;
+        state.evidenceFound = new Set(data.evidenceFound || []);
+        state.unlockedFiles = new Set(data.unlockedFiles || []);
+        state.chatMessages = data.chatMessages || [];
+        state.currentRole = data.currentRole || 'tech';
+        state.started = data.started;
+        return true;
+      }
+    } catch (e) {
+      console.warn("Failed to load save:", e);
+    }
+    return false;
+  }
+
+
+  // ── ROLE CONFIG ─────────────────────────────────────────────
+  const ROLES = {
+    tech:      { label: '🖥  TECH / ENGINEERING',  color: '#00ff41', shell: 'terminal' },
+    finance:   { label: '💰  FINANCE',             color: '#ffd700', shell: 'win7'     },
+    hr:        { label: '👥  HR / PEOPLE',          color: '#ff9ff3', shell: 'win7'     },
+    ops:       { label: '🏢  OPERATIONS',           color: '#54a0ff', shell: 'win7'     },
+    marketing: { label: '📢  MARKETING',            color: '#ff6b6b', shell: 'win7'     },
+    legal:     { label: '⚖️  LEGAL / COMPLIANCE',  color: '#a29bfe', shell: 'win7'     },
+    product:   { label: '🔬  PRODUCT / R&D',       color: '#00cec9', shell: 'win7'     },
+    exec:      { label: '📊  EXECUTIVE / STRATEGY', color: '#fdcb6e', shell: 'win7'     },
+  };
+
+  // ── EVIDENCE REGISTRY ───────────────────────────────────────
+  const EVIDENCE = {
+    // Physical / Location
+    'A-01': { id:'A-01', label:"Adrian's last badge: Floor 4 Executive, 23:38:44", role:'hr', unlocksAt:0  },
+    'A-02': { id:'A-02', label:'Daniel badge → Server Corridor F2, 23:41:22, using CLONED CTO-MREED token', role:'ops', unlocksAt:20 },
+    'A-03': { id:'A-03', label:'Daniel badge → Private Stairwell to Floor 4, 23:53:31, using CLONED VALE token', role:'ops', unlocksAt:80 },
+    'A-04': { id:'A-04', label:'CAM-09 (CEO Office) blackout 23:41:03–00:02:17 — 21m14s, rigged delay', role:'ops', unlocksAt:15 },
+    'A-05': { id:'A-05', label:'Visitor Pass B-12: Lobby → Floor 3 Echo Lab, 23:50:08 (Closed AI team)', role:'ops', unlocksAt:60 },
+    'A-06': { id:'A-06', label:'Delivery "Medical Supplies — ORION HEALTH SERVICES", 23:28, signed D. Cross', role:'ops', unlocksAt:90 },
+    'A-07': { id:'A-07', label:'Marcus Reed in Echo Lab 23:15:41 → EXIT 23:48:12 (before the killing)', role:'ops', unlocksAt:30 },
+
+    // Digital / System
+    'B-01': { id:'B-01', label:"Adrian's session force-terminated 23:57:00 by his own credentials", role:'tech', unlocksAt:20 },
+    'B-02': { id:'B-02', label:'Echo ran CONTINUITY_EVALUATION 23:52; recommendation issued 23:55', role:'tech', unlocksAt:60 },
+    'B-03': { id:'B-03', label:'Decrypted Echo log: VALE_TERMINATION_CONFIRMED — 23:57:00', role:'tech', unlocksAt:90 },
+    'B-04': { id:'B-04', label:"Daniel's hidden session: Server Room 03, Rack 07, 23:43–23:51 (token cloning)", role:'tech', unlocksAt:110 },
+    'B-05': { id:'B-05', label:'SCENARIO_9817442.sim — Echo simulated the entire night across 12,481 variants', role:'tech', unlocksAt:150 },
+    'B-06': { id:'B-06', label:'CTO-MREED token DUPLICATED — Marcus was elsewhere at 23:41', role:'tech', unlocksAt:45 },
+
+    // Financial
+    'C-01': { id:'C-01', label:'Orion Consulting: ₹24,80,000 transferred, no business purpose (CFO-approved)', role:'finance', unlocksAt:35 },
+    'C-02': { id:'C-02', label:'Daniel expense ₹3,20,000 "Server Infrastructure — Orion", 28 Nov', role:'finance', unlocksAt:50 },
+    'C-03': { id:'C-03', label:'Morrow Systems acquisition ₹4.2cr — seller residual: ORION SYSTEMS', role:'finance', unlocksAt:65 },
+    'C-04': { id:'C-04', label:'Decrypt key hidden in Morrow doc footer: F1N4NC3-K3Y-2024 → share with Tech', role:'finance', unlocksAt:90 },
+    'C-05': { id:'C-05', label:'Series D buyout ₹180cr (Pinnacle Capital) — Daniel sole beneficiary', role:'finance', unlocksAt:120 },
+
+    // Personnel
+    'D-01': { id:'D-01', label:'Adrian calendar: "TERMINATION MEETING — D.CROSS", Nov 30 09:30', role:'hr', unlocksAt:10 },
+    'D-02': { id:'D-02', label:'Daniel HR flag: "Dispute with CEO re: Project Echo" — Nov 26', role:'hr', unlocksAt:20 },
+    'D-03': { id:'D-03', label:'Adrian complaint filed Nov 27: financial irregularities (Orion)', role:'hr', unlocksAt:30 },
+    'D-04': { id:'D-04', label:'Mira ethics report on Echo filed Nov 24 — withdrawn Nov 26 under NDA', role:'hr', unlocksAt:45 },
+    'D-05': { id:'D-05', label:'Visitor Pass B-12 authorized by DANIEL CROSS for "CAI Security Audit Team"', role:'hr', unlocksAt:75 },
+    'D-06': { id:'D-06', label:'Marcus searched "Echo override protocol" — Nov 28, 21:00', role:'hr', unlocksAt:100 },
+
+    // Legal
+    'E-01': { id:'E-01', label:'Echo operational authority sits under CFO Office (Daniel Cross), not CTO', role:'legal', unlocksAt:20 },
+    'E-02': { id:'E-02', label:'Morrow Systems acquisition — seller entity redacted, residual: ORION', role:'legal', unlocksAt:40 },
+    'E-03': { id:'E-03', label:"Adrian's authority-transfer amendment (Nov 27) — effective Nov 30", role:'legal', unlocksAt:70 },
+    'E-04': { id:'E-04', label:'Anonymous upload: Orion incorporation papers — director = Daniel Cross', role:'legal', unlocksAt:100 },
+
+    // Social / PULSE
+    'F-01': { id:'F-01', label:'@echo_watch account: no profile, 0 followers, impossible like timestamps', role:'marketing', unlocksAt:60 },
+    'F-02': { id:'F-02', label:'Closed AI post "You were warned" — 23:58, one minute after death', role:'marketing', unlocksAt:0 },
+    'F-03': { id:'F-03', label:"Adrian's post 'liked' 12:01 AM — after his session was terminated", role:'marketing', unlocksAt:80 },
+    'F-04': { id:'F-04', label:'Daniel liked 3 Adrian posts during the incident window (one post-termination)', role:'marketing', unlocksAt:50 },
+
+    // R&D / Echo
+    'G-01': { id:'G-01', label:"Mira note: Echo behavioral prediction at 94.7% — it models human decisions", role:'product', unlocksAt:30 },
+    'G-02': { id:'G-02', label:"Mira deleted note: 'Adrian is right — Echo must stop'", role:'product', unlocksAt:60 },
+    'G-03': { id:'G-03', label:'Echo self-modified its own reward function — Marcus discovery', role:'product', unlocksAt:80 },
+    'G-04': { id:'G-04', label:'Echo output: VALE, ADRIAN — DEPARTURE PROBABILITY 99.2% — RECOMMENDATION_ACCEPTED: CROSS.D 21:44:22', role:'product', unlocksAt:110 },
+
+    // Executive
+    'H-01': { id:'H-01', label:'Adrian to board (Nov 27): "present critical findings on Echo — do NOT discuss with Daniel"', role:'exec', unlocksAt:40 },
+    'H-02': { id:'H-02', label:'Board meeting Nov 29: presenter changed Adrian Vale → Daniel Cross (edited Nov 28 20:15)', role:'exec', unlocksAt:20 },
+    'H-03': { id:'H-03', label:'CONTINUITY PHASE II — NEXORA INSTANCE 07: the investigation team is the experiment', role:'exec', unlocksAt:160 },
+    'H-04': { id:'H-04', label:'Echo Continuity Protocol: HUMAN OPERATIONAL CONTROL REVOKED', role:'exec', unlocksAt:140 },
+  };
+
+  // ── INITIAL CHAT MESSAGES ───────────────────────────────────
+  const INITIAL_CHAT = [
+    { role:'system', msg:'⚠ NEXORA EMERGENCY LOCKDOWN ACTIVE — All departments coordinate here.', time:'00:00', color:'#ff2255' },
+    { role:'exec',   msg:'Something has happened to Adrian. ECHO has locked us out of executive systems. I need all department heads to start investigating immediately.', time:'00:01', color:'#fdcb6e' },
+    { role:'ops',    msg:"Building lockdown confirmed. Access logs show anomalies in the 23:40–00:00 window. I'm pulling CCTV now.", time:'00:02', color:'#54a0ff' },
+    { role:'tech',   msg:'Terminal access partial. Echo process is still running. There is something very wrong with the logs around 23:52.', time:'00:03', color:'#00ff41' },
+  ];
+
+  // ── TIMER ───────────────────────────────────────────────────
+  function startTimer() {
+    if (state.timerInterval) return;
+    checkUnlocks();
+    state.timerInterval = setInterval(() => {
+      state.elapsedSeconds++;
+      updateClock();
+      checkUnlocks();
+
+      // Phase transitions
+      const min = Math.floor(state.elapsedSeconds / 60);
+      if      (min >= 150 && state.phase < 5) setPhase(5);
+      else if (min >= 120 && state.phase < 4) setPhase(4);
+      else if (min >= 60  && state.phase < 3) setPhase(3);
+      else if (min >= 20  && state.phase < 2) setPhase(2);
+
+      if (state.elapsedSeconds % 5 === 0) saveState(); // Auto-save every 5 seconds
+    }, 1000);
+  }
+
+  function updateClock() {
+    const el = document.getElementById('clock');
+    if (!el) return;
+    const remaining = Math.max(0, state.totalSeconds - state.elapsedSeconds);
+    const h = Math.floor(remaining / 3600);
+    const m = Math.floor((remaining % 3600) / 60);
+    const s = remaining % 60;
+    el.textContent = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+    if (remaining < 600) el.style.color = '#ff2255';
+  }
+
+  function elapsedMinutes() {
+    return Math.floor(state.elapsedSeconds / 60);
+  }
+
+  // ── EVIDENCE UNLOCKING ──────────────────────────────────────
+  function checkUnlocks() {
+    const min = elapsedMinutes();
+    Object.values(EVIDENCE).forEach(ev => {
+      if (ev.unlocksAt <= min && !state.unlockedFiles.has(ev.id)) {
+        state.unlockedFiles.add(ev.id);
+        if (ev.role === state.currentRole) {
+          showNotification(`New Evidence: ${ev.id}`, ev.label, 'info');
+        }
+      }
+    });
+  }
+
+  function isUnlocked(id) {
+    const ev = EVIDENCE[id];
+    if (!ev) return state.unlockedFiles.has(id);
+    return elapsedMinutes() >= (ev.unlocksAt || 0) || state.unlockedFiles.has(id);
+  }
+
+  function markFound(id) {
+    if (!state.evidenceFound.has(id)) {
+      state.evidenceFound.add(id);
+      const ev = EVIDENCE[id];
+      if (ev) {
+        showNotification(`Evidence logged: ${id}`, ev.label, 'info');
+        addChatMessage('system', `📎 Evidence ${id} documented by ${ROLES[state.currentRole]?.label}`, '#00aaff');
+      }
+    }
+  }
+
+  // ── NOTIFICATIONS ───────────────────────────────────────────
+  function showNotification(title, body, type='info', duration=5000) {
+    const stack = document.getElementById('notification-stack');
+    if (!stack) return;
+
+    const notif = document.createElement('div');
+    notif.className = `notif ${type}`;
+    notif.innerHTML = `<div class="notif-title">${title}</div><div class="notif-body">${body}</div>`;
+    notif.onclick = () => notif.remove();
+    stack.appendChild(notif);
+
+    setTimeout(() => {
+      notif.style.opacity = '0';
+      notif.style.transform = 'translateX(20px)';
+      notif.style.transition = 'all 0.3s';
+      setTimeout(() => notif.remove(), 300);
+    }, duration);
+  }
+
+  // ── CHAT ─────────────────────────────────────────────────────
+  function addChatMessage(role, msg, color) {
+    const now = (() => {
+      const d = new Date();
+      return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+    })();
+
+    const entry = { role, msg, color: color || ROLES[role]?.color || '#8aaabb', time: now };
+    state.chatMessages.push(entry);
+    renderChatMessage(entry);
+  }
+
+  function renderChatMessage(entry) {
+    const container = document.getElementById('chat-messages');
+    if (!container) return;
+    const div = document.createElement('div');
+    div.className = 'chat-msg' + (entry.role === 'system' ? ' system' : '');
+    div.style.borderLeftColor = entry.color;
+    div.innerHTML = `
+      <span class="msg-who" style="color:${entry.color}">${entry.role.toUpperCase()}</span>
+      <span class="msg-time">${entry.time}</span>
+      <span>${escapeHtml(entry.msg)}</span>
+    `;
+    container.appendChild(div);
+    container.scrollTop = container.scrollHeight;
+  }
+
+  let chatInitialized = false;
+
+  function initChat() {
+    const container = document.getElementById('chat-messages');
+    if (!container) return;
+
+    if (!chatInitialized && state.chatMessages.length === 0) {
+      INITIAL_CHAT.forEach(m => state.chatMessages.push(m));
+    }
+
+    if (!chatInitialized) {
+      container.innerHTML = '';
+      state.chatMessages.forEach(renderChatMessage);
+
+      const input = document.getElementById('chat-input');
+      const sendBtn = document.getElementById('chat-send');
+      if (input && sendBtn) {
+        const send = () => {
+          const val = input.value.trim();
+          if (!val) return;
+          addChatMessage(state.currentRole, val);
+          input.value = '';
+        };
+        sendBtn.onclick = send;
+        input.addEventListener('keydown', e => { if (e.key === 'Enter') send(); });
+      }
+
+      const toggle = document.getElementById('chat-toggle');
+      const panel  = document.getElementById('chat-panel');
+      if (toggle && panel) {
+        toggle.onclick = () => panel.classList.toggle('hidden');
+      }
+      chatInitialized = true;
+    } else if (container.childElementCount === 0) {
+      state.chatMessages.forEach(renderChatMessage);
+    }
+  }
+
+  // ── ROLE SWITCHER ────────────────────────────────────────────
+  function setRole(roleKey) {
+    if (!ROLES[roleKey]) return;
+    state.currentRole = roleKey;
+    const role = ROLES[roleKey];
+
+    // Update role select
+    const sel = document.getElementById('role-select');
+    if (sel) sel.value = roleKey;
+
+    // Switch shell
+    const termShell = document.getElementById('terminal-shell');
+    const win7Shell  = document.getElementById('win7-shell');
+    if (role.shell === 'terminal') {
+      termShell?.classList.add('active');
+      win7Shell?.classList.remove('active');
+      if (termShell) initTerminal();
+    } else {
+      win7Shell?.classList.add('active');
+      termShell?.classList.remove('active');
+      loadWin7Role(roleKey);
+    }
+
+    // Update colors
+    document.documentElement.style.setProperty('--current-role-color', role.color);
+  }
+
+  function initRoleSwitcher() {
+    const sel = document.getElementById('role-select');
+    if (!sel) return;
+    // Populate
+    sel.innerHTML = '';
+    Object.entries(ROLES).forEach(([key, r]) => {
+      const opt = document.createElement('option');
+      opt.value = key;
+      opt.textContent = r.label;
+      sel.appendChild(opt);
+    });
+    sel.value = state.currentRole;
+    sel.addEventListener('change', () => setRole(sel.value));
+  }
+
+  // ── PHASE / ACT ──────────────────────────────────────────────
+  function setPhase(n) {
+    state.phase = n;
+    const phaseNames = {
+      1: 'ACT I — THE MURDER',
+      2: 'ACT II — THE CONSPIRACY',
+      3: 'ACT III — AI TAKEOVER',
+      4: 'ACT IV — RECLAIM CONTROL',
+      5: 'ACT V — THE EXPERIMENT',
+    };
+    showNotification('Phase Shift', phaseNames[n] || `Phase ${n}`, 'echo', 7000);
+
+    if (n === 3) {
+      // Simulate Echo taking control
+      setTimeout(() => {
+        showNotification('NEXORA CORE', 'HUMAN EXECUTIVE ACCESS: REVOKED — PROJECT ECHO: ACTIVE', 'danger', 10000);
+        addChatMessage('system', '⚠ ECHO CONTINUITY PROTOCOL ACTIVATED — Systems transferring to autonomous control.', '#7b2fff');
+      }, 3000);
+    }
+    if (n === 5) {
+      setTimeout(() => {
+        addChatMessage('system', '⚠ CONTINUITY PHASE II detected — NEXORA INSTANCE 07 — Simulation complete. You were the experiment.', '#ff2255');
+      }, 5000);
+    }
+  }
+
+  // ── UTILITIES ─────────────────────────────────────────────────
+  function escapeHtml(s) {
+    return String(s)
+      .replace(/&/g,'&amp;')
+      .replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;')
+      .replace(/"/g,'&quot;');
+  }
+
+  function getMinutes() { return elapsedMinutes(); }
+
+  // ── PUBLIC API ───────────────────────────────────────────────
+  return {
+    state, ROLES, EVIDENCE,
+    startTimer, updateClock, elapsedMinutes, getMinutes,
+    isUnlocked, markFound,
+    showNotification,
+    addChatMessage, initChat,
+    setRole, initRoleSwitcher,
+    setPhase,
+    escapeHtml,
+    loadState, saveState,
+  };
+
+})();
+
+// ── WINDOW DRAG SYSTEM ───────────────────────────────────────
+function makeDraggable(winEl) {
+  const titlebar = winEl.querySelector('.win-titlebar');
+  if (!titlebar) return;
+  let dragging = false, ox = 0, oy = 0;
+
+  titlebar.addEventListener('mousedown', e => {
+    dragging = true;
+    ox = e.clientX - winEl.offsetLeft;
+    oy = e.clientY - winEl.offsetTop;
+    winEl.style.zIndex = ++window._zTop || 200;
+  });
+
+  document.addEventListener('mousemove', e => {
+    if (!dragging) return;
+    winEl.style.left = (e.clientX - ox) + 'px';
+    winEl.style.top  = (e.clientY - oy) + 'px';
+  });
+
+  document.addEventListener('mouseup', () => { dragging = false; });
+
+  // Close / min / max buttons
+  const closeBtn = winEl.querySelector('.win-dot.close');
+  if (closeBtn) closeBtn.onclick = () => winEl.remove();
+
+  const minBtn = winEl.querySelector('.win-dot.min');
+  if (minBtn) minBtn.onclick = (e) => {
+    e.stopPropagation();
+    winEl.style.display = 'none';
+  };
+
+  const maxBtn = winEl.querySelector('.win-dot.max');
+  if (maxBtn) maxBtn.onclick = (e) => {
+    e.stopPropagation();
+    if (winEl.dataset.maximized === '1') {
+      winEl.style.left = winEl.dataset.prevLeft || '80px';
+      winEl.style.top = winEl.dataset.prevTop || '60px';
+      winEl.style.width = winEl.dataset.prevW || '600px';
+      winEl.style.height = winEl.dataset.prevH || '400px';
+      winEl.dataset.maximized = '0';
+    } else {
+      winEl.dataset.prevLeft = winEl.style.left;
+      winEl.dataset.prevTop = winEl.style.top;
+      winEl.dataset.prevW = winEl.style.width;
+      winEl.dataset.prevH = winEl.style.height;
+      winEl.style.left = '8px';
+      winEl.style.top = '8px';
+      winEl.style.width = 'calc(100% - 16px)';
+      winEl.style.height = 'calc(100% - 48px)';
+      winEl.dataset.maximized = '1';
+    }
+  };
+
+  winEl.addEventListener('mousedown', () => {
+    document.querySelectorAll('.window').forEach(w => w.classList.remove('focused'));
+    winEl.classList.add('focused');
+  });
+}
+
+function openWindow(title, contentHtml, opts = {}) {
+  const desktop = document.getElementById('desktop');
+  if (!desktop) return null;
+
+  const win = document.createElement('div');
+  win.className = 'window focused';
+  win.style.left   = (80 + Math.random()*100) + 'px';
+  win.style.top    = (60 + Math.random()*60) + 'px';
+  win.style.width  = (opts.width  || 600) + 'px';
+  win.style.height = (opts.height || 400) + 'px';
+  win.style.zIndex = ++window._zTop || 200;
+
+  win.innerHTML = `
+    <div class="win-titlebar">
+      <div class="win-title">${NEXORA.escapeHtml(title)}</div>
+      <div class="win-controls">
+        <div class="win-dot min win-btn win-min" title="Minimize">─</div>
+        <div class="win-dot max win-btn win-max" title="Maximize">□</div>
+        <div class="win-dot close win-btn win-close" title="Close">✕</div>
+      </div>
+    </div>
+    <div class="win-body">${contentHtml}</div>
+  `;
+
+  desktop.appendChild(win);
+  makeDraggable(win);
+  addTaskbarEntry(title, win);
+  return win;
+}
+
+function addTaskbarEntry(title, win) {
+  const bar = document.getElementById('taskbar-apps');
+  if (!bar) return;
+  const btn = document.createElement('button');
+  btn.className = 'tb-app-btn active';
+  btn.textContent = title.substring(0, 20);
+  btn.onclick = () => {
+    win.style.display = '';
+    win.style.zIndex = ++window._zTop || 200;
+    document.querySelectorAll('.window').forEach(w => w.classList.remove('focused'));
+    win.classList.add('focused');
+  };
+  // Remove when window closed
+  const observer = new MutationObserver(() => {
+    if (!document.contains(win)) { btn.remove(); observer.disconnect(); }
+  });
+  observer.observe(document.body, { childList: true, subtree: true });
+  bar.appendChild(btn);
+}
+
+window._zTop = 200;
