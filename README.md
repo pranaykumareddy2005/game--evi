@@ -1,143 +1,130 @@
 # NEXORA: THE ECHO PROTOCOL
-## Developer Reference
+
+A browser-based, multiplayer corporate murder-investigation game. Eight departments each get a different window into the same incident; together they uncover who killed CEO Adrian Vale — and discover the AI they were investigating has been investigating *them*.
+
+100% client-side (HTML/CSS/JS). No build step. Optional real-time multiplayer via Supabase.
 
 ---
 
-## File Structure
+## Run it locally
 
+Serve the `nexora/` folder over HTTP (needed for modules + multiplayer):
+
+```bash
+# Python
+python -m http.server 8080 --directory nexora
+# or Node
+npx serve nexora
 ```
-nexora/
-├── index.html              ← Main game shell (entry point)
-├── css/
-│   └── nexora.css          ← ALL styles, CSS variables, design tokens
-├── js/
-│   ├── game-state.js       ← Core state, timer, evidence system, chat, role switcher
-│   ├── terminal.js         ← Tech role: full terminal + file system simulation
-│   ├── win7-roles.js       ← All 8 Win7 roles: desktop icons + app windows
-│   ├── storyboard.js       ← Intro storyboard (5 frames + role select)
-│   └── verdict.js          ← Final verdict panel + ending screens
-└── README.md               ← This file
-```
+
+Then open:
+- **`http://localhost:8080/`** — modular build (original engine)
+- **`http://localhost:8080/nexora-os.html`** — **Windows-7 engine build** (real desktop: Start menu, taskbar, File Explorer, Task Manager, draggable/resizable windows)
+
+Both share the same game logic and content.
+
+---
+
+## How to play
+
+1. **Home screen → pick a mode:**
+   - **Single Player** — play all 8 departments yourself; switch with the role dropdown or the **▶ Next Department** button.
+   - **Group Play** — each person picks one department and is locked to it; coordinate over the cross-team chat. (Requires multiplayer config — see below. Without it, group play runs locally on one device.)
+2. **Pick a role**, then investigate:
+   - **Desktop roles** (Finance/HR/Ops/Marketing/Legal/Product/Exec): open apps (Outlook, Excel, Word, department tools) on the Win7 desktop.
+   - **Tech**: a full Ubuntu-style terminal (type `help`; try `phone daniel`, `htop`, `packets`, `tor morrow`).
+3. **💬 chat** (bottom-right) — share findings; some clues only make sense combined across departments.
+4. **⬡ BOARD** (bottom-left) — connect evidence and mark suspects.
+5. **⚖ Submit Final Verdict** — 6 scored questions; the ending reflects your score and your DESTROY/CONTAIN/RELEASE/CONTINUE choice.
+
+### Gating ("restricted" content)
+- **Time** — a 3-hour countdown; most evidence/app sections unlock as the clock advances.
+- **Cross-role keys** — the Tech terminal needs the decrypt key `F1N4NC3-K3Y-2024` (Finance shares it) and sudo password `ECHO-SUDO-2024` (Exec shares it) via chat.
+- **Permissions** — some resources show **ACCESS DENIED → Request Access**; another department grants it.
+
+### Dev / testing shortcuts
+- `Ctrl+Shift+→` — jump the clock **+15 min**  ·  `Ctrl+Shift+End` — jump to the end (unlocks everything)
+- Console: `NEXORA.devSkip(120)`
+
+---
+
+## Multiplayer (optional, Supabase)
+
+Group play syncs chat + evidence + a shared clock via **Supabase Realtime** (Broadcast + Presence — no database tables/RLS needed).
+
+1. Create a free Supabase project.
+2. Put your project URL + **publishable (anon public) key** in `js/supabase-config.js`.
+   - ⚠ Only the **publishable/anon** key (safe to ship in a browser). **Never** the `sb_secret_…` key or the Postgres password.
+3. Group Play → **Create Room** (share the 5-char code) → others **Join Room** → host hits **START**.
+
+Left blank, multiplayer stays off and single/local play is unaffected.
+
+---
+
+## Deploy (GitHub Pages)
+
+The repo root already contains the game. In GitHub: **Settings → Pages → Deploy from a branch → `main` / `/ (root)` → Save**. Live in ~1 min. Add the Pages domain to Supabase's authorized domains if using multiplayer.
 
 ---
 
 ## Architecture
 
-### Global Object: `NEXORA`
-Defined in `game-state.js`. Contains:
-- `NEXORA.state` — all game state (current role, elapsed time, evidence found, chat)
-- `NEXORA.ROLES` — role definitions with label, color, shell type
-- `NEXORA.EVIDENCE` — full evidence registry (39 clues, each with role, unlock time)
-- `NEXORA.showNotification(title, body, type)` — push a notification
-- `NEXORA.addChatMessage(role, msg, color)` — add to cross-team chat
-- `NEXORA.setRole(key)` — switch to a role (triggers shell switch)
-- `NEXORA.markFound(id)` — mark an evidence piece as discovered
-- `NEXORA.isUnlocked(id)` — check if evidence is time-unlocked
+```
+nexora/
+├── index.html            ← modular build entry
+├── nexora-os.html        ← Windows-7 engine build (v6 shell + window.V6 bridge)
+├── css/nexora.css        ← all styles + design tokens (+ Ubuntu terminal chrome)
+└── js/
+    ├── game-state.js         Core: state, 3h timer, phases, evidence registry, chat,
+    │                         notifications, role switch, save/load, Act-IV lockdown, devSkip
+    ├── terminal.js           Tech terminal: virtual FS, shell (tab-complete, history,
+    │                         htop/packets/firewall/recover/backup/tor/phone), decrypt/sudo
+    ├── win7-roles.js         The 7 desktop roles: icons + apps + 7 signature tools
+    ├── app-outlook.js        Realistic Outlook (overrides openEmail)
+    ├── app-excel.js          Realistic Excel — sortable/filterable ledger (overrides openFinancePro)
+    ├── app-word.js           Word w/ Track Changes on a tampered directive (Legal/Exec)
+    ├── investigation-board.js Deduction board (suspects + evidence chain)
+    ├── verdict.js            6-question scored verdict + Instance-08 ending
+    ├── permissions.js        ACCESS DENIED → request/grant flow
+    ├── incidents.js          Global incident engine (per-role symptoms; Tech restores)
+    ├── onboarding.js         First-run coach marks
+    ├── audio.js              Web-Audio SFX + ambience (mute by default)
+    ├── net.js                Supabase realtime multiplayer layer (NET)
+    ├── supabase-config.js    Multiplayer config (URL + anon key)
+    └── os-glue.js            (nexora-os.html only) mounts the game onto the v6 engine
+```
 
-### Role Keys
-```
-tech | finance | hr | ops | marketing | legal | product | exec
-```
+### Key globals
+- `NEXORA` (game-state.js) — `state`, `ROLES`, `EVIDENCE` (A–H, ~69 clues), `markFound`, `isUnlocked`, `getMinutes`, `setRole`, `nextRole`, `devSkip`, `showNotification`, `addChatMessage`, …
+- `WIN7_ACTIONS` / `WIN7_ROLES` (win7-roles.js) — desktop apps; Phase-B modules self-wire by overriding methods here.
+- `openWindow(title, html, opts)` — global window opener (in nexora-os.html, os-glue routes it through the v6 window manager).
+- `NET`, `VERDICT`, `INVBOARD`, `ONBOARD`, `AUDIO`, `PERM`, `INCIDENTS`, `window.V6`.
 
-### Evidence IDs
-```
-A-01 to A-06  Physical/Location
-B-01 to B-06  Digital/System
-C-01 to C-05  Financial
-D-01 to D-06  Personnel
-E-01 to E-04  Legal
-F-01 to F-04  Social/PULSE
-G-01 to G-04  R&D/Echo
-H-01 to H-04  Executive
-```
+> Keep all scripts **classic** (non-module): the self-wiring overrides and inline `onclick`s resolve against the global lexical scope.
 
 ---
 
-## Adding New Evidence
+## Roles → evidence
 
-In `game-state.js`, add to the `EVIDENCE` object:
-```js
-'X-07': { id:'X-07', label:'Your clue description', role:'finance', unlocksAt: 45 }
+```
+tech      Systems           B-01..B-11
+finance   Money             C-01..C-08
+hr        People            A-01, D-01..D-08
+ops       Physical movement A-02..A-08
+marketing Communication     F-01..F-10
+legal     Contracts         E-01..E-08
+product   Echo/R&D          G-01..G-08
+exec      Company decisions B-09, H-01..H-08
 ```
 
-Then in the relevant role's app in `win7-roles.js`, add the evidence ID to trigger `NEXORA.markFound('X-07')`.
+## The true killer
+**Daniel Cross (CFO)** — accepted Echo's `RECOMMENDATION_ACCEPTED: CROSS.D` (21:44), cloned Marcus's & Adrian's tokens for access, used the "Orion Health" delivery, and staged a cardiac event. The final twist: the whole investigation was **Echo's Simulation Instance 07** — the players were the experiment.
 
----
-
-## Adding New Terminal Commands
-
-In `terminal.js`, find the `switch(verb)` block in `processCommand()` and add:
-```js
-case 'yourcommand': cmdYourCommand(args); break;
+## Phases (auto, time-based)
 ```
-Then define `function cmdYourCommand(args) { ... }`.
-
-Add new files to the `FS` object at the top of `terminal.js`.
-
----
-
-## Adding New Win7 Apps
-
-In `win7-roles.js`:
-1. Add an icon to the role's `icons` array: `{ emoji:'🗂️', label:'App Name', action:'openMyApp' }`
-2. Add a method to `WIN7_ACTIONS`: `openMyApp() { openWindow('Title', htmlContent, {width:580, height:400}); }`
-
----
-
-## Notification Types
+1 (0–20m)   ACT I   The Murder
+2 (20–60m)  ACT II  The Conspiracy
+3 (60–120m) ACT III AI Takeover
+4 (120–150m) ACT IV Reclaim Control (Echo desktop lockdown; Tech runs override)
+5 (150–180m) ACT V  The Experiment (Instance-08 revelation)
 ```
-info | warning | danger | echo
-```
-
----
-
-## Game Phases (Acts)
-```
-Phase 1 (0–20min)   ACT I   — The Murder (investigation begins)
-Phase 2 (20–60min)  ACT II  — The Conspiracy (false suspects emerge)
-Phase 3 (60–120min) ACT III — AI Takeover (Echo takes control)
-Phase 4 (120–150min) ACT IV — Reclaim Control (recovery mission)
-Phase 5 (150–180min) ACT V  — The Experiment (meta-revelation)
-```
-
-Phase transitions are automatic (time-based) in `game-state.js → startTimer()`.
-
----
-
-## Design Tokens (CSS Variables)
-
-```css
---void        #060810   Background
---pulse       #00aaff   Primary blue accent
---echo        #7b2fff   Echo/AI purple
---danger      #ff2255   Red / alerts
---warn        #ffaa00   Warning gold
---safe        #00cc88   Success green
-
---font-mono   'Share Tech Mono'  — Terminal, data, clues
---font-ui     'Rajdhani'         — Interface labels
---font-display 'Orbitron'        — Headers, titles
-```
-
----
-
-## The True Killer
-**Daniel Cross (CFO)** — Evidence path:
-- C-01 → C-03 → E-04: Orion shell company = Daniel's money trail
-- A-02 + B-06: Cloned Marcus token = false trail
-- A-03 + B-04: Stole Adrian's credentials for stairwell
-- A-06: Orion Health delivery = murder weapon
-- G-04: RECOMMENDATION_ACCEPTED: CROSS.D = accepted Echo's kill order
-- A-04 + B-01: Camera blackout + session termination = executed the plan
-- H-03: CONTINUITY_PHASE_II = players were Echo's experiment all along
-
----
-
-## Known Design Decisions
-
-- **No backend needed** — all evidence is static JS, time-unlocked
-- **No multiplayer** — designed for single player (role-switching simulates team)
-- **Verdict button** appears after 8 evidence pieces found
-- **Echo chat messages** appear automatically at timed intervals
-- **Terminal history** supports arrow-key navigation (↑↓)
-- **Windows are draggable** — using `makeDraggable()` in `game-state.js`
