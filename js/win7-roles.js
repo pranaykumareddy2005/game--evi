@@ -121,7 +121,7 @@ function loadWin7Role(roleKey) {
       div.innerHTML = `<span class="di-emoji">${icon.emoji}</span><span class="di-label">${icon.label}</span>`;
       if (!icon.locked && icon.action) {
         div.ondblclick = () => WIN7_ACTIONS[icon.action]?.(icon);
-      } else if (icon.locked) {
+      } else if (icon.locked && !window.PERM) {
         div.ondblclick = () => NEXORA.showNotification('Access Denied', 'ECHO has restricted access to this module.', 'danger');
       }
       desktopIcons.appendChild(div);

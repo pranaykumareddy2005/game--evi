@@ -257,7 +257,7 @@ window.INVBOARD = (() => {
     const overlay = document.createElement('div');
     overlay.id = 'invboard-overlay';
     overlay.style.cssText = `
-      position: fixed; inset: 0; background: rgba(6,8,16,0.96); z-index: 9400;
+      position: fixed; inset: 0; background: rgba(6,8,16,0.96); z-index: 9350;
       display: flex; align-items: flex-start; justify-content: center;
       font-family: var(--font-mono); overflow-y: auto; overflow-x: hidden; padding: 32px 0;
     `;

@@ -199,7 +199,7 @@
             .forEach(x => x.classList.remove('selected'));
           d.classList.add('selected');
         });
-        if (icon.locked) {
+        if (icon.locked && !window.PERM) {
           d.addEventListener('dblclick', () =>
             NEXORA.showNotification('Access Denied',
               'ECHO has restricted access to this module.', 'danger'));
