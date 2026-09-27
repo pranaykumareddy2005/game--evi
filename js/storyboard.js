@@ -320,6 +320,10 @@ const STORYBOARD = (() => {
   }
 
   // ── HOME / MODE SELECT ───────────────────────────────────────
+  function netEnabled() {
+    return !!(window.NET && window.NET.enabled);
+  }
+
   function chooseMode(mode) {
     gameMode = mode;
     const home = document.getElementById('home-screen');
@@ -328,7 +332,231 @@ const STORYBOARD = (() => {
       home.style.transition = 'opacity 0.6s';
       setTimeout(() => home.remove(), 600);
     }
-    renderFrame(0);
+    // Group play with a configured multiplayer layer → lobby.
+    // Otherwise (single player, or no Supabase config) → local intro frames.
+    if (mode === 'group' && netEnabled()) {
+      showLobby();
+    } else {
+      renderFrame(0);
+    }
+  }
+
+  // ── GROUP LOBBY (multiplayer) ────────────────────────────────
+  let lobbyPresence = {};
+
+  function removeLobbyOverlay() {
+    const el = document.getElementById('lobby-screen');
+    if (el) el.remove();
+  }
+
+  function showLobby() {
+    removeLobbyOverlay();
+
+    const el = document.createElement('div');
+    el.id = 'lobby-screen';
+    el.style.cssText = `position:fixed;inset:0;z-index:9200;display:flex;flex-direction:column;
+      align-items:center;justify-content:flex-start;overflow-y:auto;text-align:center;padding:40px 24px;
+      background:radial-gradient(circle at 50% 30%, #10152e 0%, #06080f 70%);font-family:var(--font-mono);`;
+    document.body.appendChild(el);
+
+    renderLobbySetup(el);
+  }
+
+  // Step 1 — name + seat pick + create/join
+  function renderLobbySetup(el) {
+    el.innerHTML = `
+      <div style="font-family:var(--font-display);font-size:11px;letter-spacing:5px;color:var(--echo);margin-bottom:8px;">◈ GROUP INVESTIGATION ◈</div>
+      <div style="font-family:var(--font-display);font-weight:900;font-size:clamp(26px,5vw,44px);letter-spacing:4px;color:#eaf2ff;line-height:1.1;margin-bottom:6px;">ASSEMBLE THE TEAM</div>
+      <div style="font-size:12px;color:#6a80a0;max-width:520px;line-height:1.6;margin-bottom:26px;">Pick your codename and a department, then create a room to host or join one with a code.</div>
+
+      <div style="width:100%;max-width:520px;text-align:left;">
+        <label style="display:block;font-family:var(--font-display);font-size:10px;letter-spacing:2px;color:#5a7090;margin-bottom:6px;">CODENAME</label>
+        <input id="lobby-name" type="text" maxlength="24" placeholder="Enter your name"
+          style="width:100%;box-sizing:border-box;background:var(--panel);border:1px solid var(--border-glow);border-radius:6px;color:#eaf2ff;font-family:var(--font-mono);font-size:14px;padding:11px 14px;margin-bottom:20px;" />
+
+        <label style="display:block;font-family:var(--font-display);font-size:10px;letter-spacing:2px;color:#5a7090;margin-bottom:10px;">CHOOSE YOUR DEPARTMENT</label>
+        <div id="lobby-seat-grid" class="role-grid" style="grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:22px;"></div>
+
+        <label style="display:block;font-family:var(--font-display);font-size:10px;letter-spacing:2px;color:#5a7090;margin-bottom:6px;">ROOM CODE <span style="color:#3a4c6a">(to join an existing room)</span></label>
+        <input id="lobby-code" type="text" maxlength="12" placeholder="e.g. ABCD"
+          style="width:100%;box-sizing:border-box;text-transform:uppercase;background:var(--panel);border:1px solid var(--border-glow);border-radius:6px;color:#eaf2ff;font-family:var(--font-mono);font-size:14px;letter-spacing:3px;padding:11px 14px;margin-bottom:8px;" />
+        <div id="lobby-error" style="min-height:18px;color:var(--danger);font-size:11px;margin-bottom:14px;"></div>
+
+        <div style="display:flex;gap:12px;flex-wrap:wrap;">
+          <button id="lobby-create" class="btn-story primary" style="flex:1 1 200px;">⚡ CREATE ROOM</button>
+          <button id="lobby-join" class="btn-story secondary" style="flex:1 1 200px;">→ JOIN ROOM</button>
+        </div>
+        <button id="lobby-back" style="margin-top:18px;background:transparent;border:none;color:#5a7090;font-family:var(--font-display);font-size:10px;letter-spacing:2px;cursor:pointer;">← BACK TO MENU</button>
+      </div>
+    `;
+
+    buildSeatGrid(el.querySelector('#lobby-seat-grid'));
+
+    const nameInput = el.querySelector('#lobby-name');
+    const codeInput = el.querySelector('#lobby-code');
+    const errEl = el.querySelector('#lobby-error');
+
+    // Peek the roster for a given code and grey out taken seats.
+    let peekTimer = null;
+    codeInput.addEventListener('input', () => {
+      errEl.textContent = '';
+      clearTimeout(peekTimer);
+      const code = codeInput.value.trim().toUpperCase();
+      if (!code) { buildSeatGrid(el.querySelector('#lobby-seat-grid'), {}); return; }
+      peekTimer = setTimeout(async () => {
+        try {
+          const taken = await NET.getTakenRoles(code);
+          buildSeatGrid(el.querySelector('#lobby-seat-grid'), taken || {});
+        } catch (e) {
+          buildSeatGrid(el.querySelector('#lobby-seat-grid'), {});
+        }
+      }, 400);
+    });
+
+    const getName = () => (nameInput.value.trim() || 'Investigator');
+
+    el.querySelector('#lobby-create').onclick = async () => {
+      errEl.textContent = '';
+      setLobbyBusy(el, true);
+      try {
+        await NET.createRoom(getName(), selectedRole);
+        renderLobbyRoster(el);
+      } catch (e) {
+        setLobbyBusy(el, false);
+        errEl.textContent = 'Could not create room. Please try again.';
+      }
+    };
+
+    el.querySelector('#lobby-join').onclick = async () => {
+      errEl.textContent = '';
+      const code = codeInput.value.trim().toUpperCase();
+      if (!code) { errEl.textContent = 'Enter a room code to join.'; return; }
+      setLobbyBusy(el, true);
+      try {
+        await NET.joinRoom(code, getName(), selectedRole);
+        renderLobbyRoster(el);
+      } catch (e) {
+        setLobbyBusy(el, false);
+        errEl.textContent = 'Could not join — check the room code and try again.';
+      }
+    };
+
+    el.querySelector('#lobby-back').onclick = () => {
+      removeLobbyOverlay();
+      gameMode = 'single';
+      showHome();
+    };
+  }
+
+  function setLobbyBusy(el, busy) {
+    ['#lobby-create', '#lobby-join'].forEach(sel => {
+      const b = el.querySelector(sel);
+      if (b) { b.disabled = busy; b.style.opacity = busy ? '0.5' : ''; b.style.pointerEvents = busy ? 'none' : ''; }
+    });
+  }
+
+  // Seat grid — reuses roleCards; `taken` maps roleKey -> taker name.
+  function buildSeatGrid(grid, taken) {
+    if (!grid) return;
+    taken = taken || {};
+    grid.innerHTML = '';
+    roleCards.forEach(r => {
+      const isTaken = Object.prototype.hasOwnProperty.call(taken, r.key);
+      const card = document.createElement('div');
+      card.className = 'role-card' + (r.key === selectedRole && !isTaken ? ' selected' : '');
+      card.style.setProperty('--current-role-color', r.color);
+      if (isTaken) { card.style.opacity = '0.4'; card.style.cursor = 'not-allowed'; }
+      card.innerHTML = `
+        <span class="rc-icon">${r.emoji}</span>
+        <div class="rc-name" style="color:${r.color}">${r.name}</div>
+        <div class="rc-sub">${isTaken ? ('Taken · ' + taken[r.key]) : r.sub}</div>
+      `;
+      if (!isTaken) {
+        card.onclick = () => {
+          selectedRole = r.key;
+          grid.querySelectorAll('.role-card').forEach(c => c.classList.remove('selected'));
+          card.classList.add('selected');
+        };
+      }
+      grid.appendChild(card);
+    });
+  }
+
+  // Step 2 — room roster + start
+  function renderLobbyRoster(el) {
+    const code = (window.NET && NET.roomCode) || '----';
+    const isHost = !!(window.NET && NET.isHost);
+
+    el.innerHTML = `
+      <div style="font-family:var(--font-display);font-size:11px;letter-spacing:5px;color:var(--echo);margin-bottom:8px;">◈ ROOM ASSEMBLED ◈</div>
+      <div style="font-family:var(--font-display);font-size:10px;letter-spacing:3px;color:#5a7090;margin-bottom:6px;">SHARE THIS CODE</div>
+      <div style="font-family:var(--font-display);font-weight:900;font-size:clamp(36px,9vw,68px);letter-spacing:10px;color:#eaf2ff;text-shadow:0 0 30px rgba(0,204,136,0.5);margin-bottom:24px;">${code}</div>
+
+      <div style="width:100%;max-width:480px;text-align:left;">
+        <div style="font-family:var(--font-display);font-size:10px;letter-spacing:2px;color:#5a7090;margin-bottom:10px;">INVESTIGATORS</div>
+        <div id="lobby-roster" style="display:flex;flex-direction:column;gap:8px;margin-bottom:26px;"></div>
+      </div>
+
+      <div id="lobby-start-area" style="width:100%;max-width:480px;"></div>
+    `;
+
+    renderRosterList(el);
+
+    const area = el.querySelector('#lobby-start-area');
+    if (isHost) {
+      const startBtn = document.createElement('button');
+      startBtn.className = 'btn-story danger';
+      startBtn.style.width = '100%';
+      startBtn.textContent = '⚡ START INVESTIGATION';
+      startBtn.onclick = () => {
+        try { NET.startGame(); } catch (e) { /* fall through to local boot */ }
+        // onStart will fire for all clients (incl. host) and boot.
+        // gameBooted guards against a double boot if it fires twice.
+      };
+      area.appendChild(startBtn);
+    } else {
+      area.innerHTML = `<div style="text-align:center;color:#8aaabb;font-size:12px;font-family:var(--font-mono);padding:12px;">Waiting for host to start…</div>`;
+    }
+
+    // Live roster updates.
+    try {
+      NET.onPresence(map => {
+        lobbyPresence = map || {};
+        renderRosterList(el);
+      });
+    } catch (e) { /* presence unavailable — static list */ }
+
+    // Shared start clock — boots every client (host + joiners).
+    try {
+      NET.onStart(() => {
+        removeLobbyOverlay();
+        startGame();
+      });
+    } catch (e) { /* no shared start — host start button still boots locally */ }
+  }
+
+  function renderRosterList(el) {
+    const list = el.querySelector('#lobby-roster');
+    if (!list) return;
+    const players = Object.values(lobbyPresence || {});
+    if (!players.length) {
+      list.innerHTML = `<div style="color:#5a7090;font-size:12px;font-family:var(--font-mono);">Waiting for investigators to join…</div>`;
+      return;
+    }
+    players.sort((a, b) => (a.joinedAt || 0) - (b.joinedAt || 0));
+    list.innerHTML = players.map(p => {
+      const role = (window.NEXORA && NEXORA.ROLES && NEXORA.ROLES[p.role]) || null;
+      const color = (role && role.color) || '#8aaabb';
+      const label = (role && role.label) || (p.role || '—');
+      return `<div style="display:flex;align-items:center;justify-content:space-between;background:var(--panel);border:1px solid var(--border-glow);border-radius:6px;padding:10px 14px;">
+        <span style="color:#eaf2ff;font-family:var(--font-mono);font-size:13px;">${escapeHtml(p.name || 'Investigator')}</span>
+        <span style="color:${color};font-family:var(--font-display);font-size:10px;letter-spacing:1px;">${escapeHtml(label)}</span>
+      </div>`;
+    }).join('');
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
   }
 
   function showHome() {
@@ -350,6 +578,7 @@ const STORYBOARD = (() => {
       <div style="font-family:var(--font-display);font-size:10px;letter-spacing:3px;color:#5a7090;margin-bottom:14px;">SELECT MODE</div>
       <div id="mode-cards" style="display:flex;gap:20px;flex-wrap:wrap;justify-content:center;max-width:720px;"></div>
 
+      ${!netEnabled() ? `<div style="margin-top:18px;font-size:10px;color:#6a80a0;letter-spacing:1px;max-width:520px;line-height:1.5;">⚠ Multiplayer not configured — group play runs locally on this device.</div>` : ''}
       ${hasSave ? `<button id="home-continue" style="margin-top:26px;background:transparent;border:1px solid var(--border-glow);color:#8ab4ff;font-family:var(--font-display);font-size:10px;letter-spacing:2px;padding:10px 24px;border-radius:4px;cursor:pointer;text-transform:uppercase;">▶ Continue saved investigation</button>` : ''}
       <div style="margin-top:22px;font-size:10px;color:#3a4c6a;letter-spacing:1px;">NEXORA INSTANCE 07 · COUNTERFACTUAL RUN</div>
     `;

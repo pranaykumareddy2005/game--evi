@@ -174,7 +174,13 @@ const NEXORA = (() => {
     if (state.timerInterval) return;
     checkUnlocks();
     state.timerInterval = setInterval(() => {
-      state.elapsedSeconds++;
+      // In synced group play, derive elapsed from the shared start clock so
+      // every browser unlocks evidence and shifts phase in lockstep.
+      if (state.mode === 'group' && typeof NET !== 'undefined' && NET.enabled && NET.startedAt) {
+        state.elapsedSeconds = Math.max(0, Math.floor((Date.now() - NET.startedAt) / 1000));
+      } else {
+        state.elapsedSeconds++;
+      }
       updateClock();
       checkUnlocks();
 
@@ -223,13 +229,22 @@ const NEXORA = (() => {
     return elapsedMinutes() >= (ev.unlocksAt || 0) || state.unlockedFiles.has(id);
   }
 
+  // Set while applying a remote (synced) update, so we don't re-broadcast it.
+  let _applyingRemote = false;
+
   function markFound(id) {
     if (!state.evidenceFound.has(id)) {
       state.evidenceFound.add(id);
       const ev = EVIDENCE[id];
       if (ev) {
         showNotification(`Evidence logged: ${id}`, ev.label, 'info');
-        addChatMessage('system', `📎 Evidence ${id} documented by ${ROLES[state.currentRole]?.label}`, '#00aaff');
+        // Attribute to the evidence's own department so the line reads the same
+        // on every client (local finder and remote receivers alike).
+        addChatMessage('system', `📎 Evidence ${id} documented by ${ROLES[ev.role]?.label || ev.role}`, '#00aaff');
+      }
+      // Share with the team in synced group play.
+      if (!_applyingRemote && state.mode === 'group' && typeof NET !== 'undefined' && NET.enabled) {
+        NET.publishEvidence(id, { role: ev ? ev.role : null });
       }
     }
   }
@@ -263,6 +278,12 @@ const NEXORA = (() => {
     const entry = { role, msg, color: color || ROLES[role]?.color || '#8aaabb', time: now };
     state.chatMessages.push(entry);
     renderChatMessage(entry);
+    // Broadcast the local player's own messages to the team (group + synced).
+    // System/@echo lines are generated locally on every client, so they are
+    // not re-broadcast (avoids duplicates).
+    if (!_applyingRemote && state.mode === 'group' && typeof NET !== 'undefined' && NET.enabled && role === state.currentRole) {
+      NET.publishChat(entry);
+    }
   }
 
   function renderChatMessage(entry) {
@@ -312,6 +333,22 @@ const NEXORA = (() => {
       if (toggle && panel) {
         toggle.onclick = () => panel.classList.toggle('hidden');
       }
+
+      // Multiplayer sync: render remote chat + apply remote evidence (once).
+      if (state.mode === 'group' && typeof NET !== 'undefined' && NET.enabled) {
+        NET.onChat(entry => {
+          _applyingRemote = true;
+          state.chatMessages.push(entry);
+          renderChatMessage(entry);
+          _applyingRemote = false;
+        });
+        NET.onEvidence(id => {
+          _applyingRemote = true;
+          markFound(id);
+          _applyingRemote = false;
+        });
+      }
+
       chatInitialized = true;
     } else if (container.childElementCount === 0) {
       state.chatMessages.forEach(renderChatMessage);

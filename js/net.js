@@ -2,49 +2,64 @@
  * NEXORA: THE ECHO PROTOCOL
  * net.js — Optional real-time multiplayer sync layer (group play)
  * ============================================================
- * Wraps Firebase Realtime Database behind a small NET API. If no
- * Firebase config is present (window.NEXORA_FIREBASE_CONFIG) or the
- * Firebase SDK failed to load, NET.enabled stays false and EVERY method
- * is a safe no-op — single player and local group play are unchanged.
+ * Backed by SUPABASE REALTIME (Broadcast + Presence). A room code maps to
+ * a channel; presence is the live player roster; broadcast carries chat,
+ * shared evidence, the synced start clock and phase. No database tables and
+ * no RLS policies are required — only the project URL + anon (public) key.
+ *
+ * If no config (window.NEXORA_SUPABASE_CONFIG) or the SDK failed to load,
+ * NET.enabled stays false and EVERY method is a safe no-op — single player
+ * and local group play are completely unchanged.
  *
  * To ACTIVATE multiplayer:
- *   1. Create a free Firebase project → add a Realtime Database.
- *   2. Copy your web app config and, BEFORE this script loads, define:
- *        <script>window.NEXORA_FIREBASE_CONFIG = { apiKey:"…", authDomain:"…",
- *          databaseURL:"https://…firebasedatabase.app", projectId:"…", appId:"…" };</script>
- *   3. Include the Firebase compat SDK + this file in index.html:
- *        <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
- *        <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+ *   1. Create a free Supabase project (Realtime is on by default).
+ *   2. BEFORE this script loads, define your config:
+ *        <script>window.NEXORA_SUPABASE_CONFIG = {
+ *           url: "https://YOURPROJECT.supabase.co",
+ *           anonKey: "YOUR-PUBLIC-ANON-KEY"
+ *        };</script>
+ *   3. Include the SDK + this file in index.html (before game-state.js):
+ *        <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
  *        <script src="js/net.js"></script>
- *   4. In the Firebase console, add your GitHub Pages domain to authorized domains
- *      and set Realtime DB rules to allow room read/write (see README).
+ *   4. (Optional) In Supabase → Realtime settings, keep "broadcast" and
+ *      "presence" enabled (default). The anon key is safe to ship; no tables
+ *      are exposed, so there is no data to protect with RLS.
  *
- * Data shape:  /rooms/{CODE}/{ meta, players, chat, evidence }
+ * Channel: "nexora:{CODE}"  · broadcast events: chat | evidence | start | phase
+ *                                                | sync_request | sync_state
  */
 
 const NET = (() => {
 
-  let enabled = false;
-  let db = null;
+  let enabled  = false;
+  let client   = null;
+  let channel  = null;
   let roomCode = null;
   let playerId = null;
-  let isHost = false;
+  let isHost   = false;
+  let me       = { name: 'Investigator', role: 'tech' };
+
+  // Locally-mirrored shared state (so we can answer late-joiners' sync requests).
+  let startedAt = null;
+  let phase = 1;
+  const evidenceSeen = new Set();
+
   const listeners = { chat: [], evidence: [], presence: [], start: [], phase: [] };
 
   // ── INIT ─────────────────────────────────────────────────────
   function init() {
     try {
-      const cfg = window.NEXORA_FIREBASE_CONFIG;
-      if (!cfg || typeof firebase === 'undefined' || !firebase.initializeApp) {
+      const cfg = window.NEXORA_SUPABASE_CONFIG;
+      const sb  = window.supabase;
+      if (!cfg || !cfg.url || !cfg.anonKey || !sb || !sb.createClient) {
         enabled = false;
         return false;
       }
-      if (!firebase.apps || !firebase.apps.length) firebase.initializeApp(cfg);
-      db = firebase.database();
+      client = sb.createClient(cfg.url, cfg.anonKey, { realtime: { params: { eventsPerSecond: 20 } } });
       enabled = true;
       return true;
     } catch (e) {
-      console.warn('[NET] Firebase init failed — multiplayer disabled:', e);
+      console.warn('[NET] Supabase init failed — multiplayer disabled:', e);
       enabled = false;
       return false;
     }
@@ -56,117 +71,142 @@ const NET = (() => {
     for (let i = 0; i < 5; i++) c += chars[Math.floor(Math.random() * chars.length)];
     return c;
   }
-  function makePlayerId() {
-    return 'p_' + Math.random().toString(36).slice(2, 10);
+  function makePlayerId() { return 'p_' + Math.random().toString(36).slice(2, 10); }
+
+  // ── CHANNEL WIRING ───────────────────────────────────────────
+  // Subscribe to a room channel and fan events out to registered listeners.
+  // Returns a Promise that resolves once SUBSCRIBED (after tracking presence).
+  function _subscribe(code) {
+    return new Promise((resolve, reject) => {
+      channel = client.channel('nexora:' + code, {
+        config: { presence: { key: playerId }, broadcast: { self: false } },
+      });
+
+      channel.on('broadcast', { event: 'chat' }, ({ payload }) => {
+        listeners.chat.forEach(cb => cb(payload));
+      });
+      channel.on('broadcast', { event: 'evidence' }, ({ payload }) => {
+        if (payload && payload.id) { evidenceSeen.add(payload.id); listeners.evidence.forEach(cb => cb(payload.id, payload)); }
+      });
+      channel.on('broadcast', { event: 'start' }, ({ payload }) => {
+        startedAt = payload && payload.startedAt; listeners.start.forEach(cb => cb(startedAt));
+      });
+      channel.on('broadcast', { event: 'phase' }, ({ payload }) => {
+        phase = (payload && payload.n) || phase; listeners.phase.forEach(cb => cb(phase));
+      });
+      // A late joiner asks for current state; anyone who has it replies.
+      channel.on('broadcast', { event: 'sync_request' }, () => {
+        if (startedAt || evidenceSeen.size) {
+          channel.send({ type: 'broadcast', event: 'sync_state',
+            payload: { startedAt, phase, evidence: Array.from(evidenceSeen) } });
+        }
+      });
+      channel.on('broadcast', { event: 'sync_state' }, ({ payload }) => {
+        if (!payload) return;
+        if (payload.startedAt && !startedAt) { startedAt = payload.startedAt; listeners.start.forEach(cb => cb(startedAt)); }
+        if (typeof payload.phase === 'number') { phase = payload.phase; listeners.phase.forEach(cb => cb(phase)); }
+        (payload.evidence || []).forEach(id => {
+          if (!evidenceSeen.has(id)) { evidenceSeen.add(id); listeners.evidence.forEach(cb => cb(id, { sync: true })); }
+        });
+      });
+
+      channel.on('presence', { event: 'sync' }, () => {
+        listeners.presence.forEach(cb => cb(_presenceMap()));
+      });
+
+      channel.subscribe(async (status) => {
+        if (status === 'SUBSCRIBED') {
+          try {
+            await channel.track({ name: me.name, role: me.role, joinedAt: Date.now() });
+            channel.send({ type: 'broadcast', event: 'sync_request', payload: { by: playerId } });
+            resolve();
+          } catch (e) { reject(e); }
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          reject(new Error('Realtime channel error: ' + status));
+        }
+      });
+    });
+  }
+
+  function _presenceMap() {
+    const out = {};
+    try {
+      const st = channel.presenceState();
+      Object.keys(st).forEach(key => {
+        const meta = st[key][0] || {};
+        out[key] = { name: meta.name, role: meta.role, joinedAt: meta.joinedAt };
+      });
+    } catch (e) {}
+    return out;
   }
 
   // ── ROOM LIFECYCLE ───────────────────────────────────────────
-  // createRoom(name, role) -> Promise<code>
   function createRoom(name, role) {
     if (!enabled) return Promise.reject('multiplayer disabled');
-    roomCode = makeCode();
-    playerId = makePlayerId();
-    isHost = true;
-    const now = firebase.database.ServerValue.TIMESTAMP;
-    const roomRef = db.ref('rooms/' + roomCode);
-    return roomRef.child('meta').set({ createdAt: now, hostId: playerId, startedAt: null, phase: 1 })
-      .then(() => _joinSeat(name, role))
-      .then(() => { _bindRoom(); return roomCode; });
+    roomCode = makeCode(); playerId = makePlayerId(); isHost = true;
+    me = { name: name || 'Investigator', role: role || 'tech' };
+    return _subscribe(roomCode).then(() => roomCode);
   }
 
-  // joinRoom(code, name, role) -> Promise<{code, takenRoles}>
   function joinRoom(code, name, role) {
     if (!enabled) return Promise.reject('multiplayer disabled');
-    code = String(code || '').trim().toUpperCase();
-    playerId = makePlayerId();
-    isHost = false;
-    const roomRef = db.ref('rooms/' + code);
-    return roomRef.child('meta').get().then(snap => {
-      if (!snap.exists()) throw new Error('Room not found: ' + code);
-      roomCode = code;
-      return _joinSeat(name, role).then(() => { _bindRoom(); return code; });
-    });
+    roomCode = String(code || '').trim().toUpperCase();
+    playerId = makePlayerId(); isHost = false;
+    me = { name: name || 'Investigator', role: role || 'tech' };
+    return _subscribe(roomCode).then(() => roomCode);
   }
 
-  function _joinSeat(name, role) {
-    const pRef = db.ref('rooms/' + roomCode + '/players/' + playerId);
-    pRef.onDisconnect().remove();
-    return pRef.set({
-      name: name || 'Investigator',
-      role: role || 'tech',
-      joinedAt: firebase.database.ServerValue.TIMESTAMP,
-      lastSeen: firebase.database.ServerValue.TIMESTAMP,
-    });
-  }
-
-  // Returns a Promise of the roles currently taken in a room (for the seat picker).
+  // Peek at which roles are already taken in a room, for the seat picker.
+  // Briefly joins presence, reads the roster, then leaves.
   function getTakenRoles(code) {
     if (!enabled) return Promise.resolve({});
     code = String(code || '').trim().toUpperCase();
-    return db.ref('rooms/' + code + '/players').get().then(snap => {
-      const taken = {};
-      snap.forEach(ch => { const v = ch.val(); if (v && v.role) taken[v.role] = v.name || true; });
-      return taken;
-    }).catch(() => ({}));
+    return new Promise((resolve) => {
+      const probeId = makePlayerId();
+      const probe = client.channel('nexora:' + code, { config: { presence: { key: probeId } } });
+      let done = false;
+      const finish = () => {
+        if (done) return; done = true;
+        const taken = {};
+        try {
+          const st = probe.presenceState();
+          Object.keys(st).forEach(k => { const m = st[k][0] || {}; if (m.role) taken[m.role] = m.name || true; });
+        } catch (e) {}
+        try { probe.unsubscribe(); } catch (e) {}
+        resolve(taken);
+      };
+      probe.on('presence', { event: 'sync' }, () => setTimeout(finish, 250));
+      probe.subscribe((s) => { if (s === 'SUBSCRIBED') setTimeout(finish, 1200); });
+    });
   }
 
   function leaveRoom() {
-    if (!enabled || !roomCode || !playerId) return;
-    try { db.ref('rooms/' + roomCode + '/players/' + playerId).remove(); } catch (e) {}
-  }
-
-  // ── BINDINGS (fan incoming DB events out to registered listeners) ─
-  function _bindRoom() {
-    if (!enabled || !roomCode) return;
-    const r = db.ref('rooms/' + roomCode);
-
-    r.child('chat').on('child_added', s => {
-      const v = s.val(); if (v) listeners.chat.forEach(cb => cb(v));
-    });
-    r.child('evidence').on('child_added', s => {
-      const id = s.key; const v = s.val() || {};
-      listeners.evidence.forEach(cb => cb(id, v));
-    });
-    r.child('players').on('value', s => {
-      const players = s.val() || {};
-      listeners.presence.forEach(cb => cb(players));
-    });
-    r.child('meta/startedAt').on('value', s => {
-      const v = s.val(); if (v) listeners.start.forEach(cb => cb(v));
-    });
-    r.child('meta/phase').on('value', s => {
-      const v = s.val(); if (v) listeners.phase.forEach(cb => cb(v));
-    });
-
-    // Heartbeat so lastSeen stays fresh.
-    setInterval(() => {
-      if (enabled && roomCode && playerId)
-        db.ref('rooms/' + roomCode + '/players/' + playerId + '/lastSeen')
-          .set(firebase.database.ServerValue.TIMESTAMP).catch(() => {});
-    }, 20000);
+    if (!enabled || !channel) return;
+    try { channel.untrack(); channel.unsubscribe(); } catch (e) {}
+    channel = null; roomCode = null;
   }
 
   // ── PUBLISH ──────────────────────────────────────────────────
   function publishChat(entry) {
-    if (!enabled || !roomCode) return false;
-    try { db.ref('rooms/' + roomCode + '/chat').push({ ...entry, playerId }); return true; }
+    if (!enabled || !channel) return false;
+    try { channel.send({ type: 'broadcast', event: 'chat', payload: { ...entry, playerId } }); return true; }
     catch (e) { return false; }
   }
   function publishEvidence(id, meta) {
-    if (!enabled || !roomCode) return false;
-    try {
-      db.ref('rooms/' + roomCode + '/evidence/' + id)
-        .set({ role: (meta && meta.role) || null, playerId, ts: firebase.database.ServerValue.TIMESTAMP });
-      return true;
-    } catch (e) { return false; }
+    if (!enabled || !channel) return false;
+    evidenceSeen.add(id);
+    try { channel.send({ type: 'broadcast', event: 'evidence', payload: { id, role: (meta && meta.role) || null, playerId, ts: Date.now() } }); return true; }
+    catch (e) { return false; }
   }
-  function startGame() {   // host only — sets the shared clock origin
-    if (!enabled || !roomCode) return;
-    db.ref('rooms/' + roomCode + '/meta/startedAt').set(firebase.database.ServerValue.TIMESTAMP);
+  function startGame() { // host sets the shared clock origin
+    if (!enabled || !channel) return;
+    startedAt = Date.now();
+    try { channel.send({ type: 'broadcast', event: 'start', payload: { startedAt } }); } catch (e) {}
   }
   function setPhase(n) {
-    if (!enabled || !roomCode) return;
-    db.ref('rooms/' + roomCode + '/meta/phase').set(n);
+    if (!enabled || !channel) return;
+    phase = n;
+    try { channel.send({ type: 'broadcast', event: 'phase', payload: { n } }); } catch (e) {}
   }
 
   // ── LISTENER REGISTRATION ────────────────────────────────────
@@ -183,6 +223,7 @@ const NET = (() => {
     get roomCode() { return roomCode; },
     get playerId() { return playerId; },
     get isHost() { return isHost; },
+    get startedAt() { return startedAt; },
     createRoom, joinRoom, getTakenRoles, leaveRoom,
     publishChat, publishEvidence, startGame, setPhase,
     onChat, onEvidence, onPresence, onStart, onPhase,
