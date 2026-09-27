@@ -15,5 +15,7 @@
  */
 window.NEXORA_SUPABASE_CONFIG = {
   url: "https://hohufnddsvcnrhqrzgqh.supabase.co",
-  anonKey: ""   // ← paste the anon PUBLIC key here (a long JWT starting with "eyJ...")
+  // Publishable (PUBLIC) client key — safe to ship in the browser. This is the
+  // new-style replacement for the anon key. NEVER put the sb_secret_… key here.
+  anonKey: "sb_publishable_eHTmiZeMqxDLBnnL74OY2A_3G7R9QUK"
 };

@@ -137,6 +137,10 @@ function loadWin7Role(roleKey) {
 // Tracks which cross-role secrets have already been posted to chat (idempotent-ish).
 const WIN7_TECH_SHARED = {};
 
+// Ops Path Reconstructor — current drag/click placement state (module-level so it
+// survives re-renders of the tool window). `placed` is an ordered list of step ids.
+let PR_STATE = { placed: [] };
+
 // ── WINDOWS 7 ACTIONS (App launchers) ────────────────────────
 const WIN7_ACTIONS = {
 
@@ -1629,9 +1633,14 @@ WHO HAS BEEN TESTING WHOM?`;
     openWindow('Relationship_Map.exe', this._toolShell('🕸️ HR RELATIONSHIP MAP', 'PERSONNEL NETWORK ANALYSIS', '#ff9ff3', body), { width:600, height:520 });
   },
 
-  // OPS — Path Reconstructor: physical timeline of the murder night.
-  openPathReconstructor() {
-    const steps = [
+  // OPS — Path Reconstructor: INTERACTIVE click-to-place reconstruction of the
+  // murder night. The player places unlocked badge events into a timeline; the
+  // tool checks the order against the true chronology (the steps-array order) and,
+  // once every unlocked event is placed (with the cloned-token steps present),
+  // reveals timestamps + the CONTRADICTION → Daniel Cross conclusion.
+  _prSteps() {
+    // Array order == canonical chronological answer key.
+    return [
       { t:'23:15:41', id:'A-07', txt:'Marcus Reed badges INTO Echo Lab (Floor 3)', ok:'#54a0ff' },
       { t:'23:38:44', id:'A-01', txt:'Adrian Vale — last badge, Floor 4 Executive', ok:'#ff6b6b' },
       { t:'23:41:03', id:'A-04', txt:'CAM-09 (CEO Office) goes DARK — 21m14s blackout', ok:'#ffaa00' },
@@ -1641,23 +1650,134 @@ WHO HAS BEEN TESTING WHOM?`;
       { t:'23:28',    id:'A-06', txt:'"Orion Health" delivery received, signed D. Cross', ok:'#ffd700' },
       { t:'--:--:--', id:'A-08', txt:'No Floor-4 badge for Daniel — he entered via the CLONED Vale token on the private stairwell', ok:'#ff3b3b' },
     ];
-    const items = steps.map(s => {
-      const unlocked = NEXORA.isUnlocked(s.id);
-      if (unlocked) NEXORA.markFound(s.id);
-      return `<div style="display:flex;gap:12px;align-items:flex-start;margin-bottom:2px;">
-        <div style="font-family:var(--font-mono);font-size:11px;color:${unlocked?s.ok:'#3a4c6a'};min-width:64px;padding-top:2px;">${unlocked?s.t:'--:--:--'}</div>
-        <div style="display:flex;flex-direction:column;align-items:center;">
-          <div style="width:11px;height:11px;border-radius:50%;background:${unlocked?s.ok:'#26344f'};box-shadow:${unlocked?`0 0 8px ${s.ok}`:'none'};"></div>
-          <div style="width:2px;flex:1;min-height:26px;background:#26344f;"></div>
-        </div>
-        <div style="flex:1;padding-bottom:16px;font-size:12px;color:${unlocked?'#dfe8ff':'#4a648f'};">
-          <span style="font-family:var(--font-mono);font-size:10px;color:${unlocked?s.ok:'#3a4c6a'};">${s.id}</span><br>${unlocked?s.txt:`⏳ Reconstructing… (T+${NEXORA.EVIDENCE[s.id]?.unlocksAt} min)`}
+  },
+
+  openPathReconstructor() {
+    const body = `<div id="pr-root">${this._prRender()}</div>`;
+    openWindow('Path_Reconstructor.exe', this._toolShell('🧭 OPS PATH RECONSTRUCTOR', 'PHYSICAL MOVEMENT TIMELINE · NIGHT OF 11-28', '#54a0ff', body), { width:640, height:520 });
+  },
+
+  // Re-render the interactive body in place (window stays put).
+  _prRefresh() {
+    const root = document.getElementById('pr-root');
+    if (root) root.innerHTML = this._prRender();
+  },
+
+  // Place an unlocked event into the reconstructed timeline.
+  _prPlace(id) {
+    if (!NEXORA.isUnlocked(id) || PR_STATE.placed.includes(id)) return;
+    PR_STATE.placed.push(id);
+    this._prRefresh();
+
+    // Completion feedback (only when the last unlocked event has just landed).
+    const unlocked = this._prSteps().filter(s => NEXORA.isUnlocked(s.id));
+    if (unlocked.length > 0 && PR_STATE.placed.length === unlocked.length) {
+      const canonical = unlocked.map(s => s.id);
+      const correct = PR_STATE.placed.every((x, i) => x === canonical[i]);
+      const keyPresent = PR_STATE.placed.includes('A-02') && PR_STATE.placed.includes('A-03');
+      if (keyPresent && correct) {
+        NEXORA.showNotification('Path Reconstructed', 'Sequence verified. Two cloned identities, one real path — Daniel Cross.', 'info');
+      } else if (keyPresent) {
+        NEXORA.showNotification('Timeline Complete', 'All events placed. Timestamps revealed — the cloned-token contradiction stands.', 'info');
+      } else if (correct) {
+        NEXORA.showNotification('Order Verified', 'Sequence matches so far. Key cloned-token events are still syncing.', 'info');
+      } else {
+        NEXORA.showNotification('Timeline Assembled', 'Order differs from the forensic chronology — use Reset to refine.', 'warning');
+      }
+    }
+  },
+
+  // Remove one placed event (click a slot to send it back to the pool).
+  _prUnplace(id) {
+    PR_STATE.placed = PR_STATE.placed.filter(x => x !== id);
+    this._prRefresh();
+  },
+
+  // Clear all placements.
+  _prReset() {
+    PR_STATE = { placed: [] };
+    this._prRefresh();
+  },
+
+  // Build the interactive body HTML from current unlock + placement state.
+  _prRender() {
+    const steps = this._prSteps();
+    const validIds = steps.map(s => s.id);
+    // Auto-mark evidence for every unlocked step (preserve original behavior).
+    steps.forEach(s => { if (NEXORA.isUnlocked(s.id)) NEXORA.markFound(s.id); });
+    // Drop any stale placements (defensive).
+    PR_STATE.placed = PR_STATE.placed.filter(id => validIds.includes(id) && NEXORA.isUnlocked(id));
+
+    const byId = id => steps.find(s => s.id === id);
+    const unlocked = steps.filter(s => NEXORA.isUnlocked(s.id));
+    const canonical = unlocked.map(s => s.id);   // correct chronological order
+    const total = unlocked.length;
+    const placedN = PR_STATE.placed.length;
+    const allPlaced = total > 0 && placedN === total;
+    const orderCorrect = allPlaced && PR_STATE.placed.every((id, i) => id === canonical[i]);
+    const keyPresent = PR_STATE.placed.includes('A-02') && PR_STATE.placed.includes('A-03');
+    const reveal = allPlaced;                     // reveal timestamps once all placed
+    const showConclusion = allPlaced && keyPresent;
+
+    // LEFT — placeable (unlocked & unplaced) chips + locked chips.
+    const placeableChips = steps
+      .filter(s => NEXORA.isUnlocked(s.id) && !PR_STATE.placed.includes(s.id))
+      .map(s => `<div onclick="WIN7_ACTIONS._prPlace('${s.id}')" title="Click to place in timeline" style="cursor:pointer;padding:9px 11px;margin-bottom:8px;border:1px solid ${s.ok};border-left:4px solid ${s.ok};border-radius:6px;background:rgba(255,255,255,0.03);font-size:12px;color:#dfe8ff;line-height:1.45;" onmouseover="this.style.background='rgba(84,160,255,0.14)'" onmouseout="this.style.background='rgba(255,255,255,0.03)'">${s.txt}</div>`)
+      .join('');
+    const lockedChips = steps
+      .filter(s => !NEXORA.isUnlocked(s.id))
+      .map(s => `<div style="padding:8px 10px;margin-bottom:8px;border:1px dashed #26344f;border-radius:6px;font-size:11px;color:#4a648f;opacity:.7;">⏳ locked until T+${NEXORA.EVIDENCE[s.id]?.unlocksAt} min</div>`)
+      .join('');
+    const noPlaceable = placeableChips === '';
+    const leftContent =
+      (noPlaceable
+        ? (total > 0 ? '<div style="padding:12px;border:1px dashed #26344f;border-radius:6px;color:#4a648f;font-size:11px;text-align:center;">All available events placed.</div>' : '')
+        : placeableChips) + lockedChips;
+
+    // RIGHT — reconstructed timeline (placed slots, click to remove).
+    const rightSlots = PR_STATE.placed.map((id, i) => {
+      const s = byId(id);
+      return `<div onclick="WIN7_ACTIONS._prUnplace('${id}')" title="Click to remove" style="cursor:pointer;display:flex;gap:10px;align-items:flex-start;padding:8px 10px;margin-bottom:8px;border:1px solid ${s.ok};border-radius:6px;background:rgba(0,0,0,0.25);">
+        <span style="font-family:var(--font-mono);font-size:12px;color:${s.ok};min-width:18px;">${i + 1}</span>
+        <div style="flex:1;">
+          <span style="font-family:var(--font-mono);font-size:10px;color:${s.ok};">${s.id}${reveal ? ` · ${s.t}` : ''}</span>
+          <div style="font-size:12px;color:#dfe8ff;line-height:1.45;">${s.txt}</div>
         </div>
       </div>`;
     }).join('');
-    const allKnown = steps.every(s => NEXORA.isUnlocked(s.id));
-    const body = items + (allKnown ? `<div style="margin-top:6px;padding:12px;border:1px dashed #ff3b3b;border-radius:4px;color:#ff9b9b;font-size:11px;line-height:1.6;">🧭 CONTRADICTION: two "identities" moved while their owners were elsewhere. The badges were <strong>cloned</strong>. Only one person's real path fits all of it — <strong>Daniel Cross</strong>.</div>` : '');
-    openWindow('Path_Reconstructor.exe', this._toolShell('🧭 OPS PATH RECONSTRUCTOR', 'PHYSICAL MOVEMENT TIMELINE · NIGHT OF 11-28', '#54a0ff', body), { width:600, height:500 });
+    const rightContent = placedN === 0
+      ? '<div style="padding:14px;border:1px dashed #26344f;border-radius:6px;color:#4a648f;font-size:11px;text-align:center;">Click an event on the left to place it here, in the order you believe it happened.</div>'
+      : rightSlots;
+
+    // FOOTER — order feedback + conclusion.
+    let footer = '';
+    if (allPlaced) {
+      footer += orderCorrect
+        ? '<div style="margin-top:12px;padding:8px 10px;border:1px solid #00cc88;border-radius:4px;color:#9bffcf;font-size:11px;">✔ Sequence matches the forensic chronology.</div>'
+        : '<div style="margin-top:12px;padding:8px 10px;border:1px solid #ffaa00;border-radius:4px;color:#ffcf6b;font-size:11px;">⚠ Order differs from the forensic chronology — timestamps now shown. Use Reset to try the exact sequence.</div>';
+    }
+    if (showConclusion) {
+      footer += '<div style="margin-top:8px;padding:12px;border:1px dashed #ff3b3b;border-radius:4px;color:#ff9b9b;font-size:11px;line-height:1.6;">🧭 CONTRADICTION: two "identities" moved while their owners were elsewhere. The badges were <strong>cloned</strong>. Only one person\'s real path fits all of it — <strong>Daniel Cross</strong>.</div>';
+    } else if (allPlaced && !keyPresent) {
+      footer += '<div style="margin-top:8px;padding:8px 10px;border:1px dashed #54a0ff;border-radius:4px;color:#a9c7ff;font-size:11px;line-height:1.5;">More badge events still syncing. The cloned-token movements (A-02, A-03) must surface before the path can be resolved.</div>';
+    }
+
+    return `
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:14px;">
+        <div style="font-size:11px;color:#8aa;">Reconstruct the physical timeline — placed <span style="color:#54a0ff;font-weight:bold;">${placedN}</span> / ${total}</div>
+        <button onclick="WIN7_ACTIONS._prReset()" style="cursor:pointer;background:rgba(84,160,255,0.12);border:1px solid #54a0ff;color:#54a0ff;border-radius:4px;padding:5px 12px;font-family:var(--font-mono);font-size:11px;">↻ Reset</button>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:14px;align-items:flex-start;">
+        <div style="flex:1 1 240px;min-width:200px;">
+          <div style="font-size:10px;letter-spacing:1px;color:#6a80a0;margin-bottom:8px;">UNPLACED BADGE EVENTS</div>
+          ${leftContent}
+        </div>
+        <div style="flex:1 1 240px;min-width:200px;">
+          <div style="font-size:10px;letter-spacing:1px;color:#6a80a0;margin-bottom:8px;">RECONSTRUCTED TIMELINE</div>
+          ${rightContent}
+        </div>
+      </div>
+      ${footer}`;
   },
 
   // MARKETING — Pulse Analyzer: timestamp/behavior anomaly detector.

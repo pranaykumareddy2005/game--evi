@@ -427,7 +427,14 @@ const NEXORA = (() => {
         addChatMessage('system', '⚠ ECHO CONTINUITY PROTOCOL ACTIVATED — Systems transferring to autonomous control.', '#7b2fff');
       }, 3000);
     }
+    if (n === 4) {
+      // Act IV — ECHO seizes the department consoles (app lockout climax).
+      try { window.NEXORA_LOCKDOWN && window.NEXORA_LOCKDOWN.engage(); } catch (e) { console.warn('lockdown engage failed', e); }
+    }
     if (n === 5) {
+      // Solo-safety fallback: lift any lingering lockdown so a single player
+      // who never ran the terminal override isn't stuck through the finale.
+      try { window.NEXORA_LOCKDOWN && window.NEXORA_LOCKDOWN.reclaim(); } catch (e) { console.warn('lockdown reclaim failed', e); }
       setTimeout(() => {
         addChatMessage('system', '⚠ CONTINUITY PHASE II detected — NEXORA INSTANCE 07 — Simulation complete. You were the experiment.', '#ff2255');
       }, 5000);
@@ -612,3 +619,127 @@ function addTaskbarEntry(title, win) {
 }
 
 window._zTop = 200;
+
+// ── ACT IV: ECHO TAKEOVER — APP LOCKOUT + RECLAIM ────────────
+// Global so the terminal (e.g. `sudo network --override --disable-echo-filter`)
+// can lift the lockdown. Purely atmospheric: nothing is truly blocked, so the
+// game can never be bricked.
+window.NEXORA_LOCKDOWN = {
+  engaged: false,
+
+  engage() {
+    if (this.engaged) return;
+    this.engaged = true;
+
+    try {
+      if (document.body) document.body.classList.add('echo-lockdown-active');
+    } catch (e) { /* ignore */ }
+
+    // Full-screen glitch wash overlay — below chat/verdict/board (8994) but
+    // above the desktop windows. pointer-events:none so nothing is blocked.
+    try {
+      if (!document.getElementById('echo-lockdown')) {
+        const ov = document.createElement('div');
+        ov.id = 'echo-lockdown';
+        ov.style.cssText = [
+          'position:fixed',
+          'left:0', 'right:0', 'bottom:0',
+          'top:48px',                 // keep the top-bar clock / role switcher readable
+          'z-index:8990',             // below chat/verdict/board buttons (8994)
+          'pointer-events:none',      // never trap the player
+          'display:flex',
+          'align-items:center',
+          'justify-content:center',
+          'text-align:center',
+          'padding:24px',
+          'background:radial-gradient(ellipse at center, rgba(123,47,255,0.18), rgba(255,34,85,0.28))',
+          'animation:echoLockdownPulse 1.4s ease-in-out infinite',
+          'font-family:monospace',
+          'color:#ffdde6',
+          'text-shadow:0 0 8px rgba(255,34,85,0.8), 0 0 18px rgba(123,47,255,0.6)'
+        ].join(';');
+        ov.innerHTML =
+          '<div style="max-width:760px">' +
+            '<div style="font-size:22px;font-weight:bold;letter-spacing:2px;margin-bottom:14px;color:#ff2255">◈ ECHO CONTINUITY PROTOCOL ◈</div>' +
+            '<div style="font-size:18px;font-weight:bold;letter-spacing:1px;margin-bottom:8px;color:#ffffff">HUMAN OPERATIONAL CONTROL SUSPENDED</div>' +
+            '<div style="font-size:14px;margin-bottom:18px;color:#e6c9ff">Autonomous systems have seized the department consoles.</div>' +
+            '<div style="font-size:12px;color:#9fe6c9;opacity:0.9">TECH: run &nbsp;<code style="color:#00ff41">sudo network --override --disable-echo-filter</code>&nbsp; to reclaim control.</div>' +
+          '</div>';
+
+        // Inject the pulse keyframes once (guarded).
+        if (!document.getElementById('echo-lockdown-style')) {
+          const st = document.createElement('style');
+          st.id = 'echo-lockdown-style';
+          st.textContent =
+            '@keyframes echoLockdownPulse{0%,100%{opacity:0.55}50%{opacity:0.85}}';
+          (document.head || document.documentElement).appendChild(st);
+        }
+
+        (document.body || document.documentElement).appendChild(ov);
+      }
+    } catch (e) { console.warn('echo-lockdown overlay failed', e); }
+
+    // Dim each open window and stamp an "ACCESS DENIED" badge (atmospheric).
+    try {
+      document.querySelectorAll('.window').forEach(win => {
+        win.classList.add('echo-locked');
+        win.style.filter = 'grayscale(0.6) brightness(0.5)';
+        if (!win.querySelector('.echo-denied-badge')) {
+          const badge = document.createElement('div');
+          badge.className = 'echo-denied-badge';
+          badge.textContent = '⛔ ACCESS DENIED';
+          badge.style.cssText = [
+            'position:absolute', 'top:8px', 'right:8px',
+            'z-index:5',
+            'background:rgba(255,34,85,0.9)', 'color:#fff',
+            'font-family:monospace', 'font-size:11px', 'font-weight:bold',
+            'letter-spacing:1px', 'padding:3px 8px', 'border-radius:3px',
+            'pointer-events:none'
+          ].join(';');
+          win.appendChild(badge);
+        }
+      });
+    } catch (e) { /* ignore */ }
+
+    try {
+      if (typeof NEXORA !== 'undefined' && NEXORA.showNotification) {
+        NEXORA.showNotification('NEXORA CORE', 'HUMAN OPERATIONAL CONTROL REVOKED — reclaim required', 'danger', 9000);
+      }
+      if (typeof NEXORA !== 'undefined' && NEXORA.addChatMessage) {
+        NEXORA.addChatMessage('system', '⚠ ECHO has locked the department consoles. TECH: attempt manual override.', '#ff2255');
+      }
+    } catch (e) { /* ignore */ }
+  },
+
+  reclaim() {
+    if (!this.engaged) return;
+    this.engaged = false;
+
+    try {
+      const ov = document.getElementById('echo-lockdown');
+      if (ov) ov.remove();
+    } catch (e) { /* ignore */ }
+
+    try {
+      if (document.body) document.body.classList.remove('echo-lockdown-active');
+    } catch (e) { /* ignore */ }
+
+    try {
+      document.querySelectorAll('.window.echo-locked').forEach(win => {
+        win.classList.remove('echo-locked');
+        win.style.filter = '';
+        const badge = win.querySelector('.echo-denied-badge');
+        if (badge) badge.remove();
+      });
+    } catch (e) { /* ignore */ }
+
+    try {
+      if (typeof NEXORA !== 'undefined' && NEXORA.showNotification) {
+        NEXORA.showNotification('CONTROL RECLAIMED', 'Human operators have forced Echo out of the consoles. Systems restored.', 'info', 8000);
+      }
+      if (typeof NEXORA !== 'undefined' && NEXORA.addChatMessage) {
+        NEXORA.addChatMessage('system', '✅ Manual override accepted. Department consoles restored to human control.', '#00cc88');
+      }
+    } catch (e) { /* ignore */ }
+  }
+};

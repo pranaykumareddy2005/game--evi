@@ -632,6 +632,7 @@ Adrian is right — Echo must stop.`,
       case 'decrypt': cmdDecrypt(args[0], args[1]); break;
       case 'trace':   cmdTrace(args[0]);   break;
       case 'network': cmdNetwork();        break;
+      case 'reclaim': cmdReclaim();        break;
       case 'netstat': cmdNetstat();        break;
       case 'connect': cmdConnect(args[0]); break;
       case 'ping':    cmdPing(args[0]);    break;
@@ -730,6 +731,8 @@ passwd            Change credential (locked)
 decrypt [file] [key]  Decrypt encrypted file
 trace [ip]        Trace IP address
 network           Show network topology
+reclaim           Override ECHO lockdown & restore human control
+                  (also: sudo network --override --disable-echo-filter)
 netstat           Show active network connections
 connect [server]  SSH to server
 ping [host]       Ping host
@@ -928,6 +931,22 @@ Type 'echo' to access the investigation terminal.
     print(node.content);
   }
 
+  function cmdReclaim() {
+    const lock = window.NEXORA_LOCKDOWN;
+    if (!lock || !lock.engaged) {
+      print(`reclaim: no active ECHO lockdown to override.`, 't-warn');
+      return;
+    }
+    print(`> Initiating manual override of ECHO continuity filter...`, 't-warn');
+    setTimeout(() => print(`> Bypassing autonomous lock [■■■■■■■■■■] 100%`, 't-warn'), 700);
+    setTimeout(() => print(`> ECHO resistance detected... rerouting authority tokens...`, 't-error'), 1500);
+    setTimeout(() => print(`> Reasserting human credential chain...`, 't-warn'), 2300);
+    setTimeout(() => {
+      print(`> HUMAN OPERATIONAL CONTROL RESTORED.`, 't-info');
+      if (window.NEXORA_LOCKDOWN) window.NEXORA_LOCKDOWN.reclaim();
+    }, 3100);
+  }
+
   function cmdNetstat() {
     print(`Active Internet connections (servers and established)`, 't-info');
     print(`Proto Recv-Q Send-Q Local Address           Foreign Address         State        Process`);
@@ -980,6 +999,12 @@ Type 'echo' to access the investigation terminal.
   }
 
   function cmdSudo(subcmd) {
+    const sc = (subcmd || '').toLowerCase();
+    // Act-IV reclaim: sudo network --override --disable-echo-filter
+    if (sc.includes('override') && (sc.includes('echo-filter') || sc.includes('disable-echo-filter'))) {
+      cmdReclaim();
+      return;
+    }
     const pwdOk = (subcmd || '').includes('ECHO-SUDO-2024') || NEXORA.getMinutes() >= 130;
     if (!pwdOk) {
       print(`sudo: This command requires executive credentials.`, 't-warn');
