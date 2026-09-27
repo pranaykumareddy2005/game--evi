@@ -1015,7 +1015,7 @@ ${min >= 40 ? `
     };
 
     const icons = docs.filter(d => min >= d.t).map(d =>
-      `<div style="display: flex; flex-direction: column; align-items: center; width: 80px; margin: 10px; cursor: pointer; text-align: center;" onclick="WIN7_ACTIONS.openDoc('${d.name}','${d.note}')">
+      `<div style="display: flex; flex-direction: column; align-items: center; width: 80px; margin: 10px; cursor: pointer; text-align: center;" onclick="WIN7_ACTIONS.openDoc('${d.name.replace(/'/g,"\\'")}','${(d.note||'').replace(/'/g,"\\'")}','${d.ev||''}')">
         <span style="font-size: 32px; margin-bottom: 4px;">${getIcon(d.name)}</span>
         <span style="font-size: 11px; word-break: break-all; color: #000; user-select: none;">${d.name}</span>
         ${d.ev ? `<span style="font-size: 9px; background: red; color: white; border-radius: 3px; padding: 1px 4px; position: absolute; margin-top: 24px; margin-left: 24px;">${d.ev}</span>` : ''}
@@ -1126,7 +1126,7 @@ while funding his control over Project Echo.
     };
 
     const icons = items.filter(d => min >= d.t).map(d =>
-      `<div style="display: flex; flex-direction: column; align-items: center; width: 80px; margin: 10px; cursor: pointer; text-align: center;" onclick="WIN7_ACTIONS.openDoc('${d.name}','${d.note}')">
+      `<div style="display: flex; flex-direction: column; align-items: center; width: 80px; margin: 10px; cursor: pointer; text-align: center;" onclick="WIN7_ACTIONS.openDoc('${d.name.replace(/'/g,"\\'")}','${(d.note||'').replace(/'/g,"\\'")}','${d.ev||''}')">
         <span style="font-size: 32px; margin-bottom: 4px;">${d.t === 60 ? '🗑️' : getIcon(d.name)}</span>
         <span style="font-size: 11px; word-break: break-all; color: #000; user-select: none;">${d.name}</span>
         ${d.ev ? `<span style="font-size: 9px; background: red; color: white; border-radius: 3px; padding: 1px 4px; position: absolute; margin-top: 24px; margin-left: 24px;">${d.ev}</span>` : ''}
@@ -1653,6 +1653,7 @@ WHO HAS BEEN TESTING WHOM?`;
   },
 
   openPathReconstructor() {
+    PR_STATE.placed = [];   // fresh reconstruction each time the tool is opened
     const body = `<div id="pr-root">${this._prRender()}</div>`;
     openWindow('Path_Reconstructor.exe', this._toolShell('🧭 OPS PATH RECONSTRUCTOR', 'PHYSICAL MOVEMENT TIMELINE · NIGHT OF 11-28', '#54a0ff', body), { width:640, height:520 });
   },

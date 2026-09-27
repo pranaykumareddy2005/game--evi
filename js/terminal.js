@@ -706,7 +706,7 @@ Adrian is right — Echo must stop.`,
     if (p === '..') {
       const parts = currentDir.split('/').filter(Boolean);
       parts.pop();
-      return '/' + parts.join('/') || '/nexora';
+      return parts.length ? '/' + parts.join('/') : '/nexora';
     }
     return (currentDir + '/' + p).replace(/\/+/g, '/');
   }
