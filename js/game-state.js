@@ -172,6 +172,7 @@ const NEXORA = (() => {
   // ── TIMER ───────────────────────────────────────────────────
   function startTimer() {
     if (state.timerInterval) return;
+    bindDevKeys();
     checkUnlocks();
     state.timerInterval = setInterval(() => {
       // In synced group play, derive elapsed from the shared start clock so
@@ -204,6 +205,34 @@ const NEXORA = (() => {
     const s = remaining % 60;
     el.textContent = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
     if (remaining < 600) el.style.color = '#ff2255';
+  }
+
+  // ── DEV / TESTING TIME-SKIP ─────────────────────────────────
+  // Jump the investigation clock forward to reach time-gated ("restricted")
+  // content instantly. Console: NEXORA.devSkip(120)  ·  Keys: Ctrl+Shift+→
+  // adds 15 min, Ctrl+Shift+End jumps to the end (T+160+). Single-player only
+  // (in synced group play the shared clock overrides local time).
+  function devSkip(mins) {
+    state.elapsedSeconds = Math.max(0, Math.min(state.totalSeconds, state.elapsedSeconds + (mins || 0) * 60));
+    checkUnlocks();
+    updateClock();
+    const min = elapsedMinutes();
+    if      (min >= 150 && state.phase < 5) setPhase(5);
+    else if (min >= 120 && state.phase < 4) setPhase(4);
+    else if (min >= 60  && state.phase < 3) setPhase(3);
+    else if (min >= 20  && state.phase < 2) setPhase(2);
+    showNotification('⏩ Dev Time-Skip', `Clock jumped to T+${min} min — time-gated content unlocked.`, 'echo', 3000);
+  }
+
+  let _devKeysBound = false;
+  function bindDevKeys() {
+    if (_devKeysBound) return;
+    _devKeysBound = true;
+    document.addEventListener('keydown', e => {
+      if (!e.ctrlKey || !e.shiftKey) return;
+      if (e.key === 'ArrowRight') { e.preventDefault(); devSkip(15); }
+      else if (e.key === 'End')   { e.preventDefault(); devSkip(999); }
+    });
   }
 
   function elapsedMinutes() {
@@ -460,7 +489,7 @@ const NEXORA = (() => {
     showNotification,
     addChatMessage, initChat,
     setRole, initRoleSwitcher, nextRole,
-    setPhase,
+    setPhase, devSkip,
     escapeHtml,
     loadState, saveState,
   };
