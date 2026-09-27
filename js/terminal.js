@@ -368,6 +368,19 @@ Adrian is right — Echo must stop.`,
     return document.getElementById(isEchoMode ? 'terminal-output' : 'normal-output');
   }
 
+  // The live prompt/input line lives INSIDE the scrolling output (moved there
+  // in init), so it flows right after the last output line like a real shell.
+  function getInputRow() {
+    return document.getElementById(isEchoMode ? 'terminal-input-row' : 'normal-input-row');
+  }
+
+  // Append output, but keep the live input line last (insert before it).
+  function appendLine(out, node) {
+    const row = getInputRow();
+    if (row && row.parentElement === out) out.insertBefore(node, row);
+    else out.appendChild(node);
+  }
+
   function print(text, cls = 't-result') {
     const out = getOutputEl();
     if (!out) return;
@@ -376,7 +389,7 @@ Adrian is right — Echo must stop.`,
       const span = document.createElement('span');
       span.className = `t-line ${cls}`;
       span.textContent = line;
-      out.appendChild(span);
+      appendLine(out, span);
     });
     out.scrollTop = out.scrollHeight;
   }
@@ -391,7 +404,7 @@ Adrian is right — Echo must stop.`,
     } else {
       line.innerHTML = `<span class="normal-prompt">user@localhost:${currentDir}$</span> <span class="t-cmd">${NEXORA.escapeHtml(cmd)}</span>`;
     }
-    out.appendChild(line);
+    appendLine(out, line);
     out.scrollTop = out.scrollHeight;
   }
 
@@ -700,10 +713,13 @@ Adrian is right — Echo must stop.`,
           print('logout: cannot exit — session locked during investigation.', 't-warn');
         }
         break;
-      case 'clear':
-        getOutputEl().innerHTML = '';
+      case 'clear': {
+        // Remove output lines but keep the inline input row alive.
+        const co = getOutputEl(), cr = getInputRow();
+        Array.from(co.children).forEach(c => { if (c !== cr) c.remove(); });
         if (isEchoMode) printWelcomeEcho();
         else printWelcomeNormal();
+      }
         break;
       case 'id':
         if (isEchoMode) {
@@ -1411,6 +1427,15 @@ Start investigation: ls /nexora/logs
     
     setupInput(normalInput);
     setupInput(echoInput);
+
+    // Real-cmd layout: move the prompt/input line INTO the scrolling output so
+    // it sits inline right after the last line (not pinned to the pane bottom).
+    const nOut = document.getElementById('normal-output');
+    const nRow = document.getElementById('normal-input-row');
+    if (nOut && nRow) { nRow.style.margin = '0'; nRow.style.padding = '0'; nOut.appendChild(nRow); }
+    const eOut = document.getElementById('terminal-output');
+    const eRow = document.getElementById('terminal-input-row');
+    if (eOut && eRow) { eRow.style.margin = '0'; eRow.style.padding = '2px 0 8px'; eOut.appendChild(eRow); }
 
     printWelcomeNormal();
 
