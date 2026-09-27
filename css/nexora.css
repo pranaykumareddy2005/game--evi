@@ -1987,3 +1987,140 @@ textarea:focus-visible,
   .desktop-icon { width: 58px; min-height: 58px; }
   .di-emoji { font-size: 22px; }
 }
+
+/* ============================================================
+   TECH ROLE — UBUNTU / GNOME WORKSTATION CHROME
+   ------------------------------------------------------------
+   Goal: make the Tech role's full-screen terminal read as an
+   Ubuntu / Linux desktop (GNOME Terminal on an aubergine GNOME
+   shell) so it visually contrasts the Win7-aero look used by the
+   other roles.
+
+   Scope: this block ONLY restyles the CHROME around the terminal
+   — the desktop backdrop (#terminal-shell), the window titlebar
+   (.terminal-inner-header), the window-control dots (.terminal-orb)
+   and the title label (.terminal-inner-title). It deliberately
+   does NOT touch the terminal OUTPUT text, the green CRT phosphor
+   glow, the prompt or the input line — those stay exactly as
+   legible as before. All rules here are additive overrides placed
+   after the originals so they win by source order (same specificity).
+
+   Palette: Ubuntu aubergine #2c001e / #300a24, Ubuntu orange
+   #E95420, warm neutral controls. Everything is kept dark so the
+   green terminal text remains high-contrast and readable.
+   No new always-on animation is introduced, so the existing
+   @media (prefers-reduced-motion: reduce) block already covers it.
+   ============================================================ */
+
+/* 1. Desktop backdrop — the "GNOME shell" behind the window.
+      Overrides the green CRT radial wash from the base rule with a
+      dark aubergine desktop plus a faint warm-orange glow rising
+      from the bottom. A slim faux GNOME top panel (a darker strip
+      with a 1px Ubuntu-orange hairline) sits in the top gutter,
+      above where the terminal window begins (window margin-top:20px). */
+#terminal-shell {
+  background:
+    /* faux GNOME top panel: dark strip 0–18px */
+    linear-gradient(180deg, #1a0512 0, #1a0512 17px, transparent 17px),
+    /* Ubuntu-orange hairline under the faux panel */
+    linear-gradient(180deg, transparent 16px, rgba(233,84,32,.55) 16px, rgba(233,84,32,.55) 17px, transparent 17px),
+    /* warm accent glow from the bottom of the desktop */
+    radial-gradient(ellipse at 50% 118%, rgba(233,84,32,.12), transparent 55%),
+    /* aubergine desktop gradient */
+    linear-gradient(180deg, #300a24 0%, #2c001e 55%, #1d0014 100%);
+}
+
+/* 2. Window titlebar — GNOME Terminal style.
+      Slim dark-aubergine bar with an Ubuntu-orange bottom edge.
+      Uses a matched right-hand spacer (::after) so the title can
+      sit visually centred between the controls and the edge,
+      the way GNOME centres its titlebar text. */
+.terminal-inner-header {
+  height: 32px;
+  padding: 0 12px;
+  gap: 8px;
+  background: linear-gradient(180deg, #3a0f2c 0%, #2c001e 100%);
+  border-bottom: 1px solid rgba(233,84,32,.38);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.04);
+}
+
+.terminal-inner-header::after {
+  content: '';
+  flex: 0 0 52px;   /* balances the ~52px of control dots on the left */
+}
+
+/* 3. Window-control dots — Ubuntu-tinted (close / minimize / maximize).
+      Orange close button as the accent, warm-neutral min/max, all as
+      small round controls. The old green phosphor glow is removed. */
+.terminal-orb {
+  width: 11px;
+  height: 11px;
+  background: #a89aa1;                    /* warm neutral control */
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,.25);
+}
+.terminal-orb.r {                          /* close */
+  background: #E95420;                     /* Ubuntu orange */
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,.28), 0 0 6px rgba(233,84,32,.45);
+}
+.terminal-orb.y {                          /* minimize */
+  background: #c7b8bf;
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,.25);
+}
+.terminal-orb.g {                          /* maximize */
+  background: #a89aa1;
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,.25);
+}
+
+/* 4. Title label — GNOME Terminal titlebar text ("user@localhost — bash").
+      Warm off-white, sans-serif (Ubuntu/system UI font) so it reads as a
+      GNOME window title rather than CRT monospace. Centred via flex + the
+      spacer above. This overrides the earlier readability tweak color. */
+.terminal-inner-title {
+  flex: 1;
+  min-width: 0;
+  margin-left: 8px;
+  text-align: center;
+  color: #f4ecef;
+  font-family: 'Ubuntu', -apple-system, 'Segoe UI', system-ui, sans-serif;
+  font-size: 11px;
+  letter-spacing: .01em;
+  text-shadow: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 5. Normal (bash) pane — tie its body into the Ubuntu palette with a
+      very dark aubergine instead of flat #0c0c0c. Kept dark so the
+      light #cccccc output text stays high-contrast. The echo/CRT pane
+      (#terminal-output) is intentionally left untouched. */
+#normal-terminal {
+  background: #1a0512;
+}
+
+/* 6. Subtle Ubuntu-orange accent framing the terminal window without
+      disturbing the green CRT tube glow: a faint warm outer ring is
+      added on top of the existing box-shadow, and a thin orange inset
+      line traces the rounded corners. */
+.terminal-inner {
+  box-shadow:
+    0 0 0 1px rgba(233,84,32,.18),
+    0 0 50px rgba(44,255,65,.11),
+    0 0 90px rgba(0,0,0,.9),
+    inset 0 0 70px rgba(0,0,0,.82),
+    inset 0 0 0 10px rgba(0,0,0,.35);
+}
+
+/* 7. Responsive — keep the chrome tidy on phones; no horizontal scroll.
+      Tighten the titlebar and drop the centring spacer so the title
+      never overflows on narrow screens. */
+@media (max-width: 640px) {
+  .terminal-inner-header {
+    height: 30px;
+    padding: 0 10px;
+    gap: 6px;
+  }
+  .terminal-inner-header::after { flex-basis: 0; }   /* no spacer when cramped */
+  .terminal-inner-title { text-align: left; font-size: 10px; }
+  .terminal-orb { width: 10px; height: 10px; }
+}

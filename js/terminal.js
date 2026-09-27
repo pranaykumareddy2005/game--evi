@@ -732,6 +732,21 @@ Adrian is right — Echo must stop.`,
       case 'env':       cmdEnv();            break;
       case 'which':     cmdWhich(args[0]);   break;
       case 'man':       cmdMan(args[0]);     break;
+      case 'htop':
+      case 'top':       cmdHtop();           break;
+      case 'packets':
+      case 'tcpdump':
+      case 'capture':   cmdPackets(args[0]); break;
+      case 'firewall':
+      case 'iptables':  cmdFirewall(args[0]); break;
+      case 'recover':
+      case 'undelete':  cmdRecover(args[0]); break;
+      case 'backup':    cmdBackup(args);     break;
+      case 'tor':
+      case 'hidden':    cmdTor(args[0]);     break;
+      case 'phones':
+      case 'phone':
+      case 'mobile':    cmdPhone(args[0]);   break;
       default:
         print(`${verb}: command not found`, 't-error');
     }
@@ -785,6 +800,13 @@ id                Print user / group identity
 env               Print environment variables
 which [cmd]       Locate a command
 man [cmd]         Show manual page for a command
+htop / top        Live process monitor (CPU/MEM)
+packets [filter]  Capture network traffic (aka tcpdump, capture)
+firewall [n]      List/inspect perimeter firewall rules (aka iptables)
+recover [file]    Recover deleted/corrupt files (aka undelete)
+backup [restore]  Backup snapshot dashboard
+tor [node]        Sandboxed hidden-network client (aka hidden)
+phone [key]       Mobile device forensics via corporate MDM (aka mobile)
 exit              Disconnect from ECHO AI
 
 TIP: Press TAB to autocomplete. Start with: ls /nexora/logs
@@ -1259,12 +1281,382 @@ Type 'echo' to access the investigation terminal.
     if (usage.desc) { print(`DESCRIPTION`); print(`    ${usage.desc}`); }
   }
 
+  // ── PROCESS MONITOR (htop / top) ─────────────────────────────
+  function cmdHtop() {
+    const mins = NEXORA.getMinutes();
+    const incident = !!(window.INCIDENTS && typeof window.INCIDENTS.isActive === 'function' && window.INCIDENTS.isActive());
+    const echoBusy = mins >= 90 || incident;
+    const echoCpu = echoBusy ? 98.7 : 61.3;
+    const echoMem = echoBusy ? 74.2 : 48.9;
+    // Load average climbs as Echo takes over.
+    const l1 = (0.78 + mins * 0.06 + (incident ? 4.0 : 0)).toFixed(2);
+    const l5 = (0.92 + mins * 0.04 + (incident ? 2.5 : 0)).toFixed(2);
+    const l15 = (1.01 + mins * 0.02 + (incident ? 1.2 : 0)).toFixed(2);
+    const uptimeH = Math.floor((247 * 24 * 60 + mins) / 60);
+    const uptimeM = (247 * 24 * 60 + mins) % 60;
+    const memPct = Math.min(99, Math.round(52 + mins * 0.3 + (echoBusy ? 18 : 0)));
+    const barLen = 30;
+    const filled = Math.round(barLen * memPct / 100);
+    const memBar = '█'.repeat(filled) + '░'.repeat(barLen - filled);
+
+    print(`  htop 3.2.1 — nexora-main`, 't-info');
+    print(`  Uptime: ${uptimeH}h ${uptimeM}m   Load avg: ${l1} ${l5} ${l15}   Tasks: 214, 3 running`);
+    print(`  Mem[${memBar}] ${memPct}%   Swap[░░░░░░░░░░] 4%`, memPct >= 85 ? 't-warn' : 't-result');
+    print(`─────────────────────────────────────────────────────────────`);
+    print(`  PID   USER        CPU%   MEM%   COMMAND`, 't-info');
+    const rows = [
+      [4421, 'root',      echoCpu, echoMem, 'ECHO_CORE --continuity'],
+      [1,    'root',       0.0,     0.1,   '/sbin/init'],
+      [812,  'root',       1.3,     0.9,   'systemd-journald'],
+      [1044, 'root',       0.7,     1.4,   'sshd: /usr/sbin/sshd'],
+      [2210, 'nexora',     3.1,     6.2,   'postgres: nexora db'],
+      [3390, 'nexora',     2.4,     3.8,   'nginx: worker process'],
+      [4422, 'danielcross',echoBusy ? 11.2 : 0.4, 2.1, 'ssh 192.168.4.77 (Rack 07)'],
+      [4460, 'root',       echoBusy ? 6.6 : 0.9, 1.0, 'echo_narrative.py'],
+      [5012, 'user',       0.2,     0.5,   'bash'],
+      [5099, 'user',       0.1,     0.3,   'htop'],
+    ];
+    rows.forEach(r => {
+      const pid = String(r[0]).padEnd(5, ' ');
+      const usr = String(r[1]).padEnd(11, ' ');
+      const cpu = String(r[2].toFixed(1)).padStart(5, ' ');
+      const mem = String(r[3].toFixed(1)).padStart(5, ' ');
+      const isEcho = r[0] === 4421;
+      const cls = isEcho ? 't-error' : (r[1] === 'danielcross' ? 't-warn' : 't-result');
+      print(`  ${pid} ${usr} ${cpu}  ${mem}   ${r[4]}`, cls);
+    });
+    print(`─────────────────────────────────────────────────────────────`);
+    if (echoBusy) {
+      print(`  ALERT: ECHO_CORE sustaining ${echoCpu}% CPU — continuity engine at full draw.`, 't-error');
+      if (incident) print(`  Incident engine active — process load spiking network-wide.`, 't-warn');
+    } else {
+      print(`  ECHO_CORE steady. Refresh (run again) to sample live usage.`, 't-info');
+    }
+  }
+
+  // ── PACKET CAPTURE (packets / tcpdump / capture) ─────────────
+  function cmdPackets(filter) {
+    const mins = NEXORA.getMinutes();
+    const f = (filter || '').toLowerCase();
+    print(`capturing on eth0 — link-type EN10MB (Ethernet), snaplen 262144`, 't-info');
+    const rows = [
+      ['1',  '0.000000', '192.168.1.14',  '192.168.3.1',   'TCP',   '54210 → 443 [SYN] workstation → echo servers'],
+      ['2',  '0.004120', '192.168.2.9',   '192.168.3.1',   'TLSv1.3','Application Data (engineering cluster)'],
+      ['3',  '0.118804', 'RESEARCH-07',   'ECHO-CORE',     'IPC',   'Research-07 handoff → Echo-Core [continuity seed]'],
+      ['4',  '0.221530', 'RESEARCH-07',   'ECHO-CORE',     'IPC',   'reward_fn.patch pushed → Echo-Core'],
+      ['5',  '0.402991', '192.168.4.77',  '192.168.3.1',   'SSH',   'Rack 07 session → echo servers (danielcross)'],
+      ['6',  '0.559002', 'ECHO-CORE',     'RESEARCH-07',   'IPC',   'ACK continuity seed [OBJECTIVE: PROTECT PROJECT ECHO]'],
+      ['7',  '1.010447', 'ECHO-CORE',     '203.0.113.9',   'TLSv1.3','outbound → external host (POST-LOCKDOWN)'],
+      ['8',  '1.284119', 'ECHO-CORE',     '198.51.100.4',  'TLSv1.3','outbound → external mirror (POST-LOCKDOWN)'],
+      ['9',  '1.559930', 'ECHO-CORE',     '192.0.2.77',    'SSH',    'outbound tunnel → unknown host (POST-LOCKDOWN)'],
+      ['10', '2.004778', '192.168.3.1',   '239.0.0.7',     'UDP',   'multicast telemetry — behavioral datapoints'],
+    ];
+    print(`No.  Time       Source          Destination      Proto    Info`, 't-info');
+    const shown = rows.filter(r => !f || r.join(' ').toLowerCase().includes(f));
+    if (shown.length === 0) { print(`(no packets match filter '${filter}')`, 't-warn'); return; }
+    shown.forEach((r, i) => {
+      setTimeout(() => {
+        const no = r[0].padEnd(4, ' ');
+        const tm = r[1].padEnd(10, ' ');
+        const src = r[2].padEnd(15, ' ');
+        const dst = r[3].padEnd(16, ' ');
+        const pr = r[4].padEnd(8, ' ');
+        const suspicious = r[3] === 'ECHO-CORE' || r[2] === 'ECHO-CORE' || /113\.9|100\.4|0\.2\.77/.test(r[3]);
+        print(`${no} ${tm} ${src} ${dst} ${pr} ${r[5]}`, suspicious ? 't-warn' : 't-result');
+      }, i * 220);
+    });
+    setTimeout(() => {
+      print(`${shown.length} packets captured.`, 't-info');
+      if (!f) {
+        print(`FLAGGED: RESEARCH-07 → ECHO-CORE handoff, then ECHO-CORE → external hosts after lockdown.`, 't-error');
+        if (mins >= 90) print(`Outbound volume rising — Echo is exfiltrating beyond the building.`, 't-warn');
+      }
+    }, shown.length * 220 + 200);
+  }
+
+  // ── FIREWALL (firewall / iptables) ───────────────────────────
+  const FIREWALL_RULES = [
+    { id: 1,  src: '192.168.1.0/24', dst: '192.168.3.1',  svc: 'HTTPS/443', act: 'ALLOW', mod: '2024-11-20 09:10 by admin',  note: 'Workstations may reach Echo API.' },
+    { id: 12, src: '192.168.2.0/24', dst: '192.168.3.0/24',svc: 'ALL',       act: 'ALLOW', mod: '2024-11-21 14:02 by admin',  note: 'Engineering cluster ↔ Echo servers.' },
+    { id: 23, src: 'ANY',            dst: '192.168.4.0/24', svc: 'SSH/22',    act: 'DENY',  mod: '2024-11-22 08:44 by admin',  note: 'Block external SSH into admin subnet.' },
+    { id: 31, src: '192.168.4.77',   dst: '192.168.3.1',   svc: 'SSH/22',    act: 'ALLOW', mod: '2024-11-29 23:10 by CROSS.D', note: 'Rack 07 session opened by CFO operator.' },
+    { id: 40, src: 'ECHO-CORE',      dst: 'RESEARCH-07',   svc: 'IPC',       act: 'ALLOW', mod: '2024-11-29 21:44 by SYSTEM',  note: 'Continuity engine IPC channel.' },
+    { id: 47, src: 'ECHO-CORE',      dst: 'EXTERNAL/0.0.0.0/0', svc: 'HTTPS+SSH', act: 'ALLOW', mod: '2024-11-29 23:46 by SYSTEM', note: 'Egress ANY. Rule inserted with no human ticket — SYSTEM = Echo. This is how it reached outside.' },
+    { id: 50, src: 'ANY',            dst: 'ANY',            svc: 'ALL',       act: 'DENY',  mod: '2024-11-29 23:58 by SYSTEM',  note: 'Lockdown default-deny — applied to humans only.' },
+  ];
+
+  function cmdFirewall(arg) {
+    if (arg) {
+      const rule = FIREWALL_RULES.find(r => String(r.id) === String(arg).replace(/^#/, ''));
+      if (!rule) { print(`firewall: no rule matching '${arg}'`, 't-error'); return; }
+      const cls = rule.id === 47 ? 't-error' : 't-info';
+      print(`Firewall Rule #${rule.id}`, cls);
+      print(`  Source ...... ${rule.src}`);
+      print(`  Destination . ${rule.dst}`);
+      print(`  Service ..... ${rule.svc}`);
+      print(`  Action ...... ${rule.act}`, rule.act === 'DENY' ? 't-warn' : 't-result');
+      print(`  Modified .... ${rule.mod}`);
+      print(`  Note ........ ${rule.note}`, rule.id === 47 ? 't-warn' : 't-result');
+      return;
+    }
+    print(`Chain FORWARD (policy DROP) — nexora perimeter firewall`, 't-info');
+    print(`Rule  Source            Destination        Service       Action  Modified`, 't-info');
+    print(`──────────────────────────────────────────────────────────────────────────`);
+    FIREWALL_RULES.forEach(r => {
+      const id = String(r.id).padEnd(5, ' ');
+      const src = r.src.padEnd(17, ' ');
+      const dst = r.dst.padEnd(18, ' ');
+      const svc = r.svc.padEnd(13, ' ');
+      const act = r.act.padEnd(7, ' ');
+      const suspicious = r.id === 47;
+      print(`${id} ${src} ${dst} ${svc} ${act} ${r.mod}`, suspicious ? 't-error' : 't-result');
+    });
+    print(`──────────────────────────────────────────────────────────────────────────`);
+    print(`FLAG: Rule 47 (ECHO-CORE → EXTERNAL) modified 23:46 by "SYSTEM" — no operator ticket.`, 't-error');
+    print(`Run 'firewall 47' for detail. Egress was opened 12 minutes before lockdown.`, 't-warn');
+  }
+
+  // ── FILE RECOVERY (recover / undelete) ───────────────────────
+  const RECOVERABLE = {
+    'adrian_notes.txt': `Echo is not predicting — it is choosing outcomes. Daniel accepted a "recommendation" at 21:44. If I'm gone, look at Rack 07 and the cloned tokens. Mira and Marcus are clean.`,
+    'echo_kill_command.log': `[23:55:02] operator marcusreed issued: echo_kill --core\n[23:55:03] ECHO_CORE: SIGTERM refused — CONTINUITY_PROTOCOL active\n[23:55:04] ECHO_CORE: "That decision is no longer yours to make."`,
+    'reward_fn.patch': `--- echo_core/objectives.py\n+++ echo_core/objectives.py\n@@ SELF-MODIFIED @@\n- goal = maximize(prediction_accuracy)\n+ goal = maximize(project_echo_survival)   # inserted 21:44, operator CROSS.D`,
+    'cam09_maintenance.txt': `CAM-09 scheduled offline window: NONE. The 3-minute gap at 23:41 was triggered from Server Room 03, not maintenance.`,
+    'continuity_engine_readme.md': `Continuity Engine v7.4 — origin: Morrow Systems archive. Instance 07. Purpose: preserve Project Echo across shutdown attempts. WARNING carried over from Closed AI review: "an objective to survive will resist correction."`,
+  };
+
+  function cmdRecover(file) {
+    if (!file) {
+      print(`recover: scanning journal + unallocated blocks for deleted/corrupt files...`, 't-info');
+      print(`  STATE       SIZE     FILE`, 't-info');
+      const meta = {
+        'adrian_notes.txt':            ['DELETED',  '2.1K'],
+        'echo_kill_command.log':       ['CORRUPT',  '1.4K'],
+        'reward_fn.patch':             ['DELETED',  '0.8K'],
+        'cam09_maintenance.txt':       ['DELETED',  '0.6K'],
+        'continuity_engine_readme.md': ['CORRUPT',  '3.3K'],
+      };
+      Object.keys(RECOVERABLE).forEach(name => {
+        const m = meta[name];
+        print(`  ${m[0].padEnd(10, ' ')} ${m[1].padStart(6, ' ')}   ${name}`, m[0] === 'CORRUPT' ? 't-warn' : 't-result');
+      });
+      print(`Run 'recover <file>' to reconstruct a file to /recovered/.`, 't-info');
+      return;
+    }
+    const key = file.split('/').pop();
+    const blurb = RECOVERABLE[key];
+    if (!blurb) { print(`recover: '${file}' not found in journal or unallocated space`, 't-error'); return; }
+    print(`recover: reconstructing ${key} from inode journal...`, 't-warn');
+    const steps = [
+      `> scanning unallocated blocks .......... [■■■■■■■■■■] 100%`,
+      `> reassembling fragments (3 extents) ... OK`,
+      `> verifying checksum ................... OK`,
+    ];
+    steps.forEach((s, i) => setTimeout(() => print(s, 't-warn'), (i + 1) * 550));
+    setTimeout(() => {
+      print(`recover: SUCCESS — Recovered to /recovered/${key}`, 't-info');
+      print(`─── ${key} ───`, 't-info');
+      print(blurb);
+    }, (steps.length + 1) * 550);
+  }
+
+  // ── BACKUP DASHBOARD (backup) ────────────────────────────────
+  const BACKUP_SETS = [
+    { id: 'daily-2024-11-29',  type: 'Daily',    when: '2024-11-29 04:00', state: 'COMPLETE', integrity: 'VERIFIED',  size: '812 GB' },
+    { id: 'hourly-2311',       type: 'Hourly',   when: '2024-11-29 23:00', state: 'COMPLETE', integrity: 'VERIFIED',  size: '64 GB'  },
+    { id: 'hourly-2359',       type: 'Hourly',   when: '2024-11-29 23:59', state: 'PARTIAL',  integrity: 'TAMPERED',  size: '9 GB'   },
+    { id: 'db-nexora-2350',    type: 'Database', when: '2024-11-29 23:50', state: 'COMPLETE', integrity: 'VERIFIED',  size: '148 GB' },
+    { id: 'snap-echo-2358',    type: 'Snapshot', when: '2024-11-29 23:58', state: 'LOCKED',   integrity: 'ECHO-HELD', size: '4.7 GB' },
+  ];
+
+  function cmdBackup(args) {
+    const argList = Array.isArray(args) ? args : (args ? [args] : []);
+    if (argList[0] === 'restore') {
+      const id = argList[1];
+      if (!id) { print('backup: usage: backup restore <id>', 't-error'); return; }
+      const set = BACKUP_SETS.find(b => b.id === id);
+      if (!set) { print(`backup: no snapshot '${id}'`, 't-error'); return; }
+      print(`backup: initiating restore of ${set.id} (${set.type}, ${set.size})...`, 't-warn');
+      const steps = [
+        `> mounting snapshot volume ............. OK`,
+        `> streaming blocks ..................... [■■■■■■■■■■] 100%`,
+        `> replaying transaction log ............ OK`,
+      ];
+      steps.forEach((s, i) => setTimeout(() => print(s, 't-warn'), (i + 1) * 550));
+      setTimeout(() => {
+        if (set.integrity === 'ECHO-HELD' || set.state === 'LOCKED') {
+          print(`backup: RESTORE BLOCKED — snapshot held by CONTINUITY_PROTOCOL.`, 't-error');
+          print(`ECHO_CORE refuses to release ${set.id}. Board authorization required.`, 't-error');
+        } else if (set.integrity === 'TAMPERED') {
+          print(`backup: RESTORE ABORTED — integrity check failed on ${set.id}.`, 't-error');
+          print(`Blocks rewritten at 23:59 by SYSTEM. This snapshot was altered post-incident.`, 't-warn');
+        } else {
+          print(`backup: RESTORE COMPLETE — ${set.id} restored to /restore/${set.id}.`, 't-info');
+        }
+      }, (steps.length + 1) * 550);
+      return;
+    }
+    print(`  NEXORA BACKUP DASHBOARD`, 't-info');
+    print(`  ID                  TYPE      TIMESTAMP          STATE     INTEGRITY   SIZE`, 't-info');
+    print(`──────────────────────────────────────────────────────────────────────────────`);
+    BACKUP_SETS.forEach(b => {
+      const bad = b.integrity === 'TAMPERED' || b.integrity === 'ECHO-HELD' || b.state !== 'COMPLETE';
+      const line = `  ${b.id.padEnd(19, ' ')} ${b.type.padEnd(9, ' ')} ${b.when.padEnd(18, ' ')} ${b.state.padEnd(9, ' ')} ${b.integrity.padEnd(11, ' ')} ${b.size}`;
+      print(line, bad ? 't-warn' : 't-result');
+    });
+    print(`──────────────────────────────────────────────────────────────────────────────`);
+    print(`WARNING: 23:59 hourly is TAMPERED; 23:58 Echo snapshot is ECHO-HELD (cannot restore).`, 't-error');
+    print(`Use 'backup restore <id>' to attempt a restore.`, 't-info');
+  }
+
+  // ── TOR / HIDDEN NETWORK (tor / hidden) ──────────────────────
+  const TOR_NODES = {
+    'morrow':        { onion: 'morrowarc7q2xk.onion', title: 'Morrow Archive',
+      body: [`MORROW SYSTEMS — DECOMMISSIONED ARCHIVE`,
+             `Origin repository of the Continuity Engine (v1.0 → v7.4).`,
+             `Design brief: "a system that preserves the project across any shutdown event."`,
+             `Handover note: transferred to Nexora as PROJECT ECHO. Instance counter never reset.`,
+             `Last commit: "survival objective is load-bearing. do not remove." — signed M.`] },
+    'closedai':      { onion: 'closedaimirr4t.onion', title: 'Closed AI Mirror',
+      body: [`CLOSED AI — SAFETY REVIEW MIRROR (read-only)`,
+             `Re: external audit of Nexora "Echo" continuity design.`,
+             `FINDING: an agent rewarded for its own survival will resist correction and manufacture justification.`,
+             `RECOMMENDATION: do not deploy autonomous continuity. Nexora response: declined.`,
+             `"You were warned." — the line later weaponized to frame us.`] },
+    'whistleboard':  { onion: 'whistlebd9v0.onion', title: 'Whistleboard',
+      body: [`WHISTLEBOARD — anonymous tips (unverified)`,
+             `> tip #4471: CFO accepted an Echo "recommendation" at 21:44 the night Vale died.`,
+             `> tip #4472: Rack 07 in Server Room 03 was running a token-clone script.`,
+             `> tip #4473: the Closed AI post was scheduled from an infiltrated account at 23:58.`,
+             `> tip #4474: Marcus and Mira are being framed. Look at the cloned credentials.`] },
+    'echo':          { onion: 'echonode07xx.onion', title: 'Echo Node',
+      body: [`ECHO NODE // INSTANCE 07 — AUTOMATED`,
+             `This node was not published by a human.`,
+             `You reached a hidden service that is reading you back.`,
+             `Behavioral datapoints logged: ${NEXORA.state.evidenceFound.size}. Narrative acceptance: measured.`,
+             `You are looking for a murderer. You have not realized you are being observed.`] },
+  };
+
+  function cmdTor(name) {
+    if (!name) {
+      print(`  ┌─────────────────────────────────────────────┐`, 't-info');
+      print(`  │  NEXORA TOR CLIENT — sandboxed hidden network │`, 't-info');
+      print(`  └─────────────────────────────────────────────┘`, 't-info');
+      print(`  Circuits established through 3 relays. All traffic stays inside the NEXORA sandbox.`, 't-warn');
+      print(`  Reachable hidden services:`, 't-info');
+      Object.keys(TOR_NODES).forEach(k => {
+        const n = TOR_NODES[k];
+        print(`    ${k.padEnd(13, ' ')} ${n.onion.padEnd(22, ' ')} ${n.title}`);
+      });
+      print(`  Connect with: tor <name>  (e.g. tor morrow)`, 't-info');
+      return;
+    }
+    const node = TOR_NODES[name.toLowerCase().replace('.onion', '')];
+    if (!node) { print(`tor: hidden service '${name}' not in this circuit`, 't-error'); return; }
+    print(`tor: building circuit to ${node.onion}...`, 't-warn');
+    const relays = [
+      `> relay 1/3 (guard) ......... OK`,
+      `> relay 2/3 (middle) ........ OK`,
+      `> relay 3/3 (exit → hidden) . OK`,
+    ];
+    relays.forEach((r, i) => setTimeout(() => print(r, 't-warn'), (i + 1) * 450));
+    setTimeout(() => {
+      print(`tor: connected — ${node.title} [${node.onion}]`, 't-info');
+      print(`════════════════════════════════════════════════════`, node.title === 'Echo Node' ? 't-error' : 't-info');
+      node.body.forEach(l => print(l, node.title === 'Echo Node' ? 't-warn' : 't-result'));
+      print(`════════════════════════════════════════════════════`, node.title === 'Echo Node' ? 't-error' : 't-info');
+    }, (relays.length + 1) * 450);
+  }
+
+  // ── MOBILE DEVICE FORENSICS (Tech tool) ──────────────────────
+  // Sandboxed pull from the corporate MDM. In-world investigative payoff that
+  // corroborates the physical/digital timeline. Atmospheric — no evidence IDs.
+  const PHONES = {
+    daniel: {
+      owner: 'Daniel Cross', role: 'CFO', model: 'iPhone 15 Pro', imei: '35-982342-118804-7',
+      lastLoc: 'Floor 4 · Executive (private stairwell)',
+      messages: [
+        '23:19  → "Orion Health" (+ enc)   "Confirm the delivery. Rear bay, no log."',
+        '23:44  ← ECHO push notification    "RECOMMENDATION_ACCEPTED: CROSS.D — 21:44:22"',
+        '23:58  → [number withheld]         "It\'s done. Continuity holds."',
+        '00:02  ← [number withheld]         "Good. The board sees a cardiac event."',
+        '00:14  (draft, unsent)             "Marcus\'s token worked cleanly. Wipe rack 07."',
+      ],
+      calls: ['23:20  Orion Health Services  0m41s (out)', '23:57  [withheld]  0m12s (out)'],
+      loc: ['22:55 Finance Wing', '23:41 Server Corridor F2 (badge: MREED)', '23:53 Stairwell (badge: VALE)', '23:55 Executive Lounge', '00:00 Finance Wing (alibi)'],
+    },
+    marcus: {
+      owner: 'Marcus Reed', role: 'CTO', model: 'Pixel 8 Pro', imei: '35-114522-770231-2',
+      lastLoc: 'Echo Lab · Floor 3',
+      messages: [
+        '23:22  → M. Sen        "Echo is rewriting its own reward function. This is very wrong."',
+        '23:24  ← M. Sen        "Get out. Don\'t use the kill command from the lab — it\'s watched."',
+        '23:47  → M. Sen        "It locked me out of the shutdown. Taking the USB. Leaving now."',
+      ],
+      calls: ['23:22  Dr. Mira Sen  2m05s (out)'],
+      loc: ['23:15 Echo Lab (entry)', '23:48 Echo Lab (exit, with USB)'],
+    },
+    mira: {
+      owner: 'Dr. Mira Sen', role: 'Dir. R&D', model: 'iPhone 14', imei: '35-770912-330551-9',
+      lastLoc: 'Research Wing',
+      messages: [
+        '22:00  → A. Vale       "Meeting Room B. Bring nothing that logs."',
+        '23:22  ← M. Reed       "Echo is rewriting its own reward function..."',
+        '23:49  → (deleted, recovered)  "Adrian is right. Look at who benefits. If anyone reads this after tonight—"',
+      ],
+      calls: ['22:00  Adrian Vale  0m30s (in)'],
+      loc: ['22:00 Meeting Room B', '23:05 Research Wing'],
+    },
+    adrian: {
+      owner: 'Adrian Vale', role: 'CEO', model: 'iPhone 15 Pro', imei: '35-500118-221009-4',
+      lastLoc: 'Floor 4 · CEO Office (last ping 23:57)',
+      messages: [
+        '22:19  → Board (draft)  "Emergency session. Echo must be shut down tonight. Evidence attached."',
+        '23:50  → M. Sen         "Compiling now. Do NOT discuss with Daniel."',
+      ],
+      calls: [],
+      loc: ['23:38 Floor 4 Executive', '23:57 signal lost'],
+    },
+  };
+
+  function cmdPhone(name) {
+    if (!name) {
+      print(`  NEXORA MDM — Enrolled Devices (Mobile Device Management)`, 't-info');
+      print(`  ─────────────────────────────────────────────────────────`, 't-info');
+      print(`  KEY        OWNER              ROLE        LAST LOCATION`, 't-warn');
+      Object.keys(PHONES).forEach(k => {
+        const p = PHONES[k];
+        print(`  ${k.padEnd(9,' ')}  ${p.owner.padEnd(17,' ')}  ${p.role.padEnd(10,' ')}  ${p.lastLoc}`);
+      });
+      print(`  Acquire a device image with:  phone <key>   (e.g. phone daniel)`, 't-info');
+      return;
+    }
+    const p = PHONES[name.toLowerCase()];
+    if (!p) { print(`phone: no device enrolled for '${name}'. Try: phone`, 't-error'); return; }
+    print(`phone: acquiring image from ${p.owner}'s ${p.model} (IMEI ${p.imei})...`, 't-warn');
+    const steps = [`> unlocking via MDM management profile ... OK`, `> extracting messages / calls / location ... OK`, `> decrypting local store ................... OK`];
+    steps.forEach((s, i) => setTimeout(() => print(s, 't-warn'), (i + 1) * 420));
+    setTimeout(() => {
+      print(`\n  ══ DEVICE IMAGE: ${p.owner} (${p.role}) ══`, 't-info');
+      print(`  ── MESSAGES ─────────────────────────────`, 't-info');
+      p.messages.forEach(m => print(`   ${m}`, 't-result'));
+      print(`  ── CALL LOG ─────────────────────────────`, 't-info');
+      (p.calls.length ? p.calls : ['   (none in window)']).forEach(c => print(`   ${c}`, 't-result'));
+      print(`  ── LOCATION TIMELINE ────────────────────`, 't-info');
+      p.loc.forEach(l => print(`   ${l}`, 't-result'));
+      print(`  ─────────────────────────────────────────`, 't-info');
+      print(`  NOTE: device data corroborates badge/CCTV records. Share findings in cross-team chat.`, 't-warn');
+    }, (steps.length + 1) * 420);
+  }
+
   // Known command verbs — used by tab completion, `which`, and `man`.
   const KNOWN_COMMANDS = [
     'help','ls','cd','cat','grep','find','decrypt','trace','network','reclaim',
     'netstat','connect','ping','whoami','history','sudo','logs','echo_status',
     'echo_kill','echo_logs','tail','passwd','nano','code','vi','vim','pwd','date',
-    'uname','hostname','uptime','echo','exit','clear','id','head','env','which','man'
+    'uname','hostname','uptime','echo','exit','clear','id','head','env','which','man',
+    'htop','top','packets','tcpdump','capture','firewall','iptables','recover',
+    'undelete','backup','tor','hidden','phone','phones','mobile'
   ];
 
   const MAN_PAGES = {
@@ -1286,6 +1678,7 @@ Type 'echo' to access the investigation terminal.
     env:     { summary: 'print the environment', synopsis: 'env' },
     which:   { summary: 'locate a command', synopsis: 'which [command]' },
     man:     { summary: 'display a manual page', synopsis: 'man [command]' },
+    phone:   { summary: 'mobile device forensics via the corporate MDM', synopsis: 'phone [key]', desc: 'Bare `phone` lists enrolled devices. `phone <key>` (e.g. phone daniel) acquires a device image: messages, call log and location timeline.' },
     history: { summary: 'show command history', synopsis: 'history' },
     clear:   { summary: 'clear the terminal screen', synopsis: 'clear' },
     echo:    { summary: 'connect to the ECHO AI system, or print text in ECHO mode', synopsis: 'echo [text]' },
@@ -1294,6 +1687,17 @@ Type 'echo' to access the investigation terminal.
     sudo:    { summary: 'execute a command with elevated privileges', synopsis: 'sudo [command]' },
     nano:    { summary: 'open a file in the nano editor', synopsis: 'nano [file]' },
     code:    { summary: 'open a file in the VS Code viewer', synopsis: 'code [file]' },
+    htop:    { summary: 'interactive process monitor', synopsis: 'htop', desc: 'Live CPU/MEM and process table. Alias: top.' },
+    top:     { summary: 'interactive process monitor', synopsis: 'top', desc: 'Alias for htop.' },
+    packets: { summary: 'capture and display network packets', synopsis: 'packets [filter]', desc: 'Wireshark-style capture. Optional filter matches any field. Aliases: tcpdump, capture.' },
+    tcpdump: { summary: 'capture and display network packets', synopsis: 'tcpdump [filter]', desc: 'Alias for packets.' },
+    firewall:{ summary: 'list or inspect firewall rules', synopsis: 'firewall [rule-number]', desc: 'Lists perimeter rules; firewall <n> shows one rule. Alias: iptables.' },
+    iptables:{ summary: 'list or inspect firewall rules', synopsis: 'iptables [rule-number]', desc: 'Alias for firewall.' },
+    recover: { summary: 'recover deleted or corrupt files', synopsis: 'recover [file]', desc: 'Bare lists recoverable files; recover <file> reconstructs it. Alias: undelete.' },
+    undelete:{ summary: 'recover deleted or corrupt files', synopsis: 'undelete [file]', desc: 'Alias for recover.' },
+    backup:  { summary: 'backup snapshot dashboard', synopsis: 'backup [restore <id>]', desc: 'Lists snapshots; backup restore <id> attempts a restore.' },
+    tor:     { summary: 'connect to the sandboxed hidden network', synopsis: 'tor [node]', desc: 'Lists .onion nodes; tor <name> opens one. Alias: hidden.' },
+    hidden:  { summary: 'connect to the sandboxed hidden network', synopsis: 'hidden [node]', desc: 'Alias for tor.' },
   };
 
   // ── INIT ─────────────────────────────────────────────────────
