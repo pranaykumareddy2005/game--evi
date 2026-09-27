@@ -245,8 +245,11 @@ const NEXORA = (() => {
     Object.values(EVIDENCE).forEach(ev => {
       if (ev.unlocksAt <= min && !state.unlockedFiles.has(ev.id)) {
         state.unlockedFiles.add(ev.id);
-        if (ev.role === state.currentRole) {
-          showNotification(`New Evidence: ${ev.id}`, ev.label, 'info');
+        // Non-spoiler nudge only — the story-aware Event Engine provides the
+        // ambient system notifications, and opening the app reveals the label.
+        // (Old behavior showed the clue label on time-unlock, pre-discovery.)
+        if (ev.role === state.currentRole && (typeof EVENTS === 'undefined')) {
+          showNotification('New Records Available', 'Fresh data has synced to your department systems.', 'info', 3500);
         }
       }
     });

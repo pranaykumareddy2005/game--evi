@@ -212,17 +212,38 @@ window.ONBOARD = (function () {
     } catch (e) {}
   }
 
+  // True once every TIP_MAP control that exists in the DOM carries a title,
+  // so the observer can stop early instead of churning for the full timeout.
+  function allTooltipsResolved() {
+    try {
+      for (var sel in TIP_MAP) {
+        if (!Object.prototype.hasOwnProperty.call(TIP_MAP, sel)) continue;
+        var el = document.querySelector(sel);
+        if (el && !el.getAttribute('title')) return false;
+      }
+      return true;
+    } catch (e) { return true; }
+  }
+
   function startTooltipWatch() {
     if (tooltipsDone) return;
     tooltipsDone = true;
     applyTooltips();
     // Late-appearing controls (verdict/board buttons) — observe + delayed passes.
+    // Narrow the observer's lifetime: disconnect as soon as every present
+    // control is titled, and cap the fallback at ~10s (was 60s) to cut churn.
+    // The timed passes below still catch any control that appears afterward.
     try {
       if (typeof MutationObserver !== 'undefined' && document.body) {
-        var mo = new MutationObserver(function () { applyTooltips(); });
+        var mo = new MutationObserver(function () {
+          try {
+            applyTooltips();
+            if (allTooltipsResolved()) { try { mo.disconnect(); } catch (e) {} }
+          } catch (e) {}
+        });
         mo.observe(document.body, { childList: true, subtree: true });
-        // Stop observing after a while to stay light.
-        setTimeout(function () { try { mo.disconnect(); } catch (e) {} }, 60000);
+        // Stop observing after a short window to stay light.
+        setTimeout(function () { try { mo.disconnect(); } catch (e) {} }, 10000);
       }
     } catch (e) {}
     setTimeout(applyTooltips, 1500);

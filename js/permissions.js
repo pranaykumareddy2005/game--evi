@@ -348,10 +348,56 @@
     } catch (e) { setTimeout(run, 16); }
   }
 
-  // Observe the document for desktop-icon containers appearing / repainting.
+  // Observe the desktop-icons container(s) appearing / repainting.
+  // Instead of watching document.body with {subtree:true} (which fires on every
+  // window open/close over a long session), attach a narrow childList+subtree
+  // observer directly to each #desktop-icons element. Because #desktop-icons is
+  // created/replaced at role boot (and may not exist when we start, or may be
+  // re-created), a lightweight bounded fallback re-attaches when the desktop
+  // (re)appears.
+  var _attached = [];        // #desktop-icons nodes we currently observe
+  var _iconObservers = [];   // their MutationObservers
+
+  function attachToDesktopIcons() {
+    try {
+      if (typeof MutationObserver === 'undefined') return false;
+      var hosts = document.querySelectorAll('#desktop-icons');
+      var attachedAny = false;
+      for (var i = 0; i < hosts.length; i++) {
+        var host = hosts[i];
+        // Skip nodes we're already observing (identity check — a replaced
+        // #desktop-icons is a new node and won't match, so it re-attaches).
+        var already = false;
+        for (var j = 0; j < _attached.length; j++) {
+          if (_attached[j] === host) { already = true; break; }
+        }
+        if (already) continue;
+        try {
+          var mo = new MutationObserver(function () { scheduleScan(); });
+          // childList + subtree: locked icons live in nested icon structure.
+          mo.observe(host, { childList: true, subtree: true });
+          _attached.push(host);
+          _iconObservers.push(mo);
+          attachedAny = true;
+        } catch (e) { /* skip this host */ }
+      }
+      // Drop observers whose host left the DOM so we don't leak / re-scan stale.
+      try {
+        for (var k = _attached.length - 1; k >= 0; k--) {
+          if (!document.contains(_attached[k])) {
+            try { _iconObservers[k].disconnect(); } catch (e) {}
+            _attached.splice(k, 1);
+            _iconObservers.splice(k, 1);
+          }
+        }
+      } catch (e) {}
+      return attachedAny;
+    } catch (e) { return false; }
+  }
+
   function installObserver() {
     try {
-      if (!document.body || typeof MutationObserver === 'undefined') {
+      if (typeof MutationObserver === 'undefined') {
         // Fallback: poll a few times in case observers are unavailable.
         var tries = 0;
         var iv = setInterval(function () {
@@ -360,8 +406,25 @@
         }, 500);
         return;
       }
-      var mo = new MutationObserver(function () { scheduleScan(); });
-      mo.observe(document.body, { childList: true, subtree: true });
+
+      // Attach directly to #desktop-icons if present.
+      attachToDesktopIcons();
+
+      // Lightweight bounded fallback: the desktop (and its #desktop-icons) is
+      // created/replaced at role boot, so poll at a slow cadence to (re)attach
+      // to any new #desktop-icons node. This is far less churn than a
+      // body-subtree observer, and any structural change inside #desktop-icons
+      // is caught by the narrow observer above.
+      var rechecks = 0;
+      var reattachIv = setInterval(function () {
+        try {
+          attachToDesktopIcons();
+          scheduleScan();
+        } catch (e) {}
+        // Keep watching long enough to survive role switches, then stop.
+        if (++rechecks > 120) { try { clearInterval(reattachIv); } catch (e) {} }
+      }, 1000);
+
       // Initial pass for anything already painted.
       scheduleScan();
     } catch (e) { /* observation is best-effort */ }

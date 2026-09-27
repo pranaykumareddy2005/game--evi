@@ -631,6 +631,7 @@ function renderStartMenu(){
     <div class="start-user"><div class="start-avatar">${iconSvg('system','sm')}</div><div><div class="start-username">${esc(state.user)}</div><div style="font-size:10px;color:#6a7e8c">WIN7-PC</div></div></div>
     <div class="start-list" id="start-list"></div>
     <div class="start-search"><input id="start-search" placeholder="Search programs and files" /></div>
+    <div class="start-file-results" id="start-file-results"></div>
   </div>
   <div class="start-right">
     <div class="start-item" data-open="explorer" data-path="C:/Users/User/Documents">${iconSvg('documents')}<span>Documents</span></div>
@@ -659,8 +660,43 @@ function renderStartMenu(){
   $('#shutdownBtn').onclick=()=>powerAction('shutdown'); $('#restartBtn').onclick=()=>powerAction('restart');
   $('#start-search').addEventListener('input',e=>{
     const q=e.target.value.toLowerCase();
-    $$('#start-list .start-item',sm).forEach(x=>x.style.display=x.textContent.toLowerCase().includes(q)?'flex':'none')
+    $$('#start-list .start-item',sm).forEach(x=>x.style.display=x.textContent.toLowerCase().includes(q)?'flex':'none');
+    const res=$('#start-file-results',sm); if(!res)return; res.innerHTML='';
+    if(!q){return;}
+    const matches=searchNexoraFiles(q);
+    matches.forEach(({name,path})=>{
+      const row=document.createElement('div');row.className='start-item';
+      row.innerHTML=`<span style="font-size:14px">📄</span><span>${esc(name)}</span>`;
+      row.title=path;
+      row.onclick=()=>{openFileByPath(path);$('#start-menu').classList.add('hidden')};
+      res.appendChild(row);
+    });
   });
+}
+// Recursively search the virtual filesystem for in-game evidence documents.
+// Only surfaces files that carry a nexoraEvidence tag OR live under a
+// "NEXORA Evidence" folder, and (LORE-FIREWALL) hides tagged files whose
+// evidence has not yet been time-unlocked.
+function searchNexoraFiles(q){
+  const out=[];
+  function walk(node,path,inEvidenceDir){
+    if(!node||!node.children)return;
+    for(const name in node.children){
+      const child=node.children[name];
+      const childPath=(path==='C:/'?'C:':path)+'/'+name;
+      if(child.type==='dir'){
+        walk(child,childPath,inEvidenceDir||/nexora evidence/i.test(name));
+      }else if(child.type==='file'){
+        const isEvidence=!!child.nexoraEvidence||inEvidenceDir;
+        if(!isEvidence)continue;
+        if(child.nexoraEvidence&&window.NEXORA&&!NEXORA.isUnlocked(child.nexoraEvidence))continue;
+        const hay=(name+' '+(child.content||'')).toLowerCase();
+        if(hay.includes(q))out.push({name,path:normalizePath(childPath)});
+      }
+    }
+  }
+  try{walk(state.files,'C:/',false);}catch(e){}
+  return out;
 }
 $('#start').addEventListener('click',e=>{e.stopPropagation();$('#start-menu').classList.toggle('hidden');systemSound('click')});
 document.addEventListener('click',e=>{if(!e.target.closest('#start-menu')&&!e.target.closest('#start'))$('#start-menu').classList.add('hidden')});
@@ -691,7 +727,7 @@ function renderExplorer(root,startPath,id){
   $('#back',root).onclick=()=>{if(hi>0){hi--;current=hist[hi];draw()}};$('#forward',root).onclick=()=>{if(hi<hist.length-1){hi++;current=hist[hi];draw()}};$('#up',root).onclick=()=>{const parts=pathParts(current);if(parts.length){parts.pop();current='C:/'+parts.join('/');hist=hist.slice(0,hi+1);hist.push(current);hi++;draw()}};$('#address',root).addEventListener('keydown',e=>{if(e.key==='Enter'){current=normalizePath(e.target.value);const n=getNode(current);if(n?.type==='dir'){hist=hist.slice(0,hi+1);hist.push(current);hi++;draw()}else systemSound('error')}});$$('.tree-node',root).forEach(n=>n.onclick=()=>{current=n.dataset.p;hist=hist.slice(0,hi+1);hist.push(current);hi++;draw()});draw();
 }
 function showFileContext(x,y,p,node,refresh){const layer=$('#context-layer');layer.innerHTML='';const c=document.createElement('div');c.className='context';c.style.left=x+'px';c.style.top=y+'px';c.innerHTML=`<div class="ctx" data-a="open">Open</div><div class="ctx" data-a="rename">Rename</div><div class="ctx" data-a="copy">Copy</div><div class="ctx" data-a="cut">Cut</div><div class="ctx" data-a="delete">Delete</div><div class="separator"></div><div class="ctx" data-a="prop">Properties</div>`;layer.appendChild(c);c.querySelectorAll('.ctx').forEach(i=>i.onclick=()=>{const a=i.dataset.a;if(a==='open'){node.type==='dir'?openWindow('explorer',{path:p}):openFileByPath(p,node)} if(a==='rename'){const nn=prompt('Rename',p.split('/').pop());if(nn){const pp=getParent(p);if(pp){pp.parent.children[nn]=pp.parent.children[pp.name];delete pp.parent.children[pp.name];saveState();refresh()}}} if(a==='delete'){if(confirm('Move this item to the Recycle Bin?')){deleteNode(p);refresh();showToast('Recycle Bin','Item moved to the Recycle Bin.');systemSound('notify')}} if(a==='prop')openProperties(p,node);layer.innerHTML=''})}
-function openFileByPath(p,node){const ext=(node.ext||p.split('.').pop()).toLowerCase();if(ext==='txt')openWindow('notepad',{path:p});else if(ext==='docx')openWindow('word',{path:p});else if(ext==='xlsx')openWindow('excel');else if(ext==='pptx')openWindow('powerpoint');else if(['png','jpg'].includes(ext))openPaintImage(node);else if(ext==='url' && String(node.content||'').includes('minesweeper'))openWindow('games');else if(ext==='url' && String(node.content||'').includes('solitaire'))openWindow('games');else showToast('Windows','There is no application associated with '+p.split('/').pop()+'.');}
+function openFileByPath(p,node){node=node||getNode(p);if(!node)return;try{if(node.nexoraEvidence&&window.NEXORA&&NEXORA.isUnlocked(node.nexoraEvidence))NEXORA.markFound(node.nexoraEvidence);}catch(e){}const ext=(node.ext||p.split('.').pop()).toLowerCase();if(ext==='txt')openWindow('notepad',{path:p});else if(ext==='docx')openWindow('word',{path:p});else if(ext==='xlsx')openWindow('excel');else if(ext==='pptx')openWindow('powerpoint');else if(['png','jpg'].includes(ext))openPaintImage(node);else if(ext==='url' && String(node.content||'').includes('minesweeper'))openWindow('games');else if(ext==='url' && String(node.content||'').includes('solitaire'))openWindow('games');else showToast('Windows','There is no application associated with '+p.split('/').pop()+'.');}
 function openPaintImage(node){openWindow('paint');}
 function openProperties(p,node){const id=openWindow('system',{width:480,height:360});setTimeout(()=>{const d=[...windows.values()].find(w=>w.id===id);if(!d)return;const root=$('.window-content',d.el);root.innerHTML=`<div class="panel"><h2>Properties</h2><div class="panel-row"><label>File name</label><span>${esc(p.split('/').pop())}</span></div><div class="panel-row"><label>Type</label><span>${node.type==='dir'?'Folder':esc(node.ext||'File')}</span></div><div class="panel-row"><label>Location</label><span>${esc(p.split('/').slice(0,-1).join('/')||'C:/')}</span></div><div class="panel-row"><label>Size</label><span>${node.type==='file'?String((node.content||'').length)+' bytes':'—'}</span></div><div class="panel-row"><label>Modified</label><span>${new Date().toLocaleString()}</span></div></div>`},50)}
 function openRecycle(){const id=openWindow('explorer',{path:'C:/'});setTimeout(()=>showToast('Recycle Bin','Recycle Bin is simulated in this build. Deleted items are stored internally.'),60)}
