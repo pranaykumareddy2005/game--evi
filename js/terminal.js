@@ -622,6 +622,12 @@ Adrian is right — Echo must stop.`,
     const verb  = parts[0].toLowerCase();
     const args  = parts.slice(1);
 
+    // Global `--help` / `-h` flag → show usage for the verb (real-shell behavior)
+    if ((args.includes('--help') || args.includes('-h')) && verb !== 'help') {
+      cmdMan(verb);
+      return;
+    }
+
     switch (verb) {
       case 'help':    cmdHelp();           break;
       case 'ls':      cmdLs(args);         break;
@@ -675,11 +681,15 @@ Adrian is right — Echo must stop.`,
         print(` ${new Date().toLocaleTimeString()} up 247 days, 14:32, 3 users, load average: 0.78, 0.92, 1.01`);
         break;
       case 'echo':
-        if (!isEchoMode) {
+        if (args.length > 0) {
+          // Real-shell behavior: `echo <text>` prints the text in either mode.
+          print(args.join(' '));
+        } else if (!isEchoMode) {
+          // Bare `echo` in normal mode connects to the ECHO AI system (game toggle).
           setEchoMode(true);
           printWelcomeEcho();
         } else {
-          print(args.join(' '));
+          print('');
         }
         break;
       case 'exit':
@@ -695,8 +705,19 @@ Adrian is right — Echo must stop.`,
         if (isEchoMode) printWelcomeEcho();
         else printWelcomeNormal();
         break;
+      case 'id':
+        if (isEchoMode) {
+          print('uid=0(echo_core) gid=0(root) groups=0(root),1(continuity)');
+        } else {
+          print('uid=1000(user) gid=1000(user) groups=1000(user),4(adm),27(sudo)');
+        }
+        break;
+      case 'head':      cmdHead(args);       break;
+      case 'env':       cmdEnv();            break;
+      case 'which':     cmdWhich(args[0]);   break;
+      case 'man':       cmdMan(args[0]);     break;
       default:
-        print(`Command not found: ${verb}. Type 'help' for commands.`, 't-error');
+        print(`${verb}: command not found`, 't-error');
     }
   }
 
@@ -740,12 +761,17 @@ whoami            Current session info
 history           Command history
 clear             Clear terminal
 sudo [cmd]        Elevated command (requires password)
+head [file]       Show first 10 lines of a file
 nano [file]       Open file in nano editor
 code [file]       Open file in VS Code viewer
 pwd               Print working directory
+id                Print user / group identity
+env               Print environment variables
+which [cmd]       Locate a command
+man [cmd]         Show manual page for a command
 exit              Disconnect from ECHO AI
 
-TIP: Start with: ls /nexora/logs
+TIP: Press TAB to autocomplete. Start with: ls /nexora/logs
 `, 't-info');
     } else {
       print(`
@@ -757,10 +783,15 @@ cd [dir]          Change directory  (.. to go up)
 cat [file]        Read file contents
 grep [term] [file] Search file for term
 find [dir] [name]  Find files by name
+head [file]       Show first 10 lines of a file
 nano [file]       Open file in nano editor
 code [file]       Open file in VS Code viewer
 pwd               Print working directory
 whoami            Current session info
+id                Print user / group identity
+env               Print environment variables
+which [cmd]       Locate a command
+man [cmd]         Show manual page for a command
 date              Show current date/time
 uname             System information
 hostname          Show hostname
@@ -769,6 +800,8 @@ history           Command history
 clear             Clear terminal
 echo              Connect to ECHO AI system
 
+TIP: Press TAB to autocomplete commands and file paths.
+
 Type 'echo' to access the investigation terminal.
 `, 't-info');
     }
@@ -776,7 +809,8 @@ Type 'echo' to access the investigation terminal.
 
   function cmdLs(args) {
     const argList = Array.isArray(args) ? args : (args ? [args] : []);
-    const showAll = argList.includes('-a') || argList.includes('-la') || argList.includes('-al');
+    const showAll = argList.some(a => /^-.*a/.test(a));
+    const longFmt = argList.some(a => /^-.*l/.test(a));
     const dir = argList.find(a => a && !a.startsWith('-'));
     const path = resolvePath(dir);
     const node = FS[path];
@@ -797,7 +831,8 @@ Type 'echo' to access the investigation terminal.
       print('(empty directory)');
       return;
     }
-    print(`Contents of ${path}:`);
+    if (!longFmt) print(`Contents of ${path}:`);
+    if (longFmt) print(`total ${node.children.length}`);
     node.children.forEach(child => {
       if (child.startsWith('.') && !showAll) return;
       const childPath = path + '/' + child;
@@ -805,7 +840,18 @@ Type 'echo' to access the investigation terminal.
       const isDir = childNode?.type === 'dir';
       const isLocked = childNode?.locked && NEXORA.getMinutes() < (childNode?.unlockAt || 0);
       const isEnc = childNode?.encrypted;
-      let line = isDir ? `  📁 ${child}/` : `  📄 ${child}`;
+      let line;
+      if (longFmt) {
+        const perms = isDir ? 'drwxr-xr-x' : '-rw-r--r--';
+        const owner = isLocked ? 'root  root ' : 'user  user ';
+        const raw = childNode ? (childNode.type === 'dir'
+          ? (childNode.children ? childNode.children.length * 512 : 0)
+          : ((childNode._decrypted ? childNode.decryptedContent : childNode.content) || '').length) : 0;
+        const size = String(raw).padStart(6, ' ');
+        line = `  ${perms} 1 ${owner} ${size} Nov 29 23:58 ${isDir ? child + '/' : child}`;
+      } else {
+        line = isDir ? `  📁 ${child}/` : `  📄 ${child}`;
+      }
       if (isLocked) line += '  [LOCKED]';
       else if (isEnc) line += '  [ENCRYPTED]';
       print(line, isLocked ? 't-locked' : 't-result');
@@ -1133,6 +1179,107 @@ Type 'echo' to access the investigation terminal.
     print(`passwd: Authentication token manipulation error. Echo has locked credential services.`, 't-error');
   }
 
+  // ── ADDITIONAL REAL-SHELL COMMANDS ───────────────────────────
+  function cmdHead(args) {
+    const argList = Array.isArray(args) ? args : (args ? [args] : []);
+    let count = 10;
+    const nIdx = argList.indexOf('-n');
+    if (nIdx !== -1 && argList[nIdx + 1]) {
+      const n = parseInt(argList[nIdx + 1], 10);
+      if (!isNaN(n) && n > 0) count = n;
+    }
+    const target = argList.find((a, i) => a && !a.startsWith('-') && argList[i - 1] !== '-n');
+    if (!target) { print('head: missing file operand', 't-error'); return; }
+    const path = resolvePath(target);
+    const node = FS[path];
+    if (!node) { print(`head: cannot open '${path}' for reading: No such file or directory`, 't-error'); return; }
+    if (node.type === 'dir') { print(`head: error reading '${path}': Is a directory`, 't-error'); return; }
+    if (node.locked && NEXORA.getMinutes() < (node.unlockAt || 0)) {
+      print(`head: ${path}: Permission denied [LOCKED until T+${node.unlockAt}min]`, 't-error'); return;
+    }
+    if (node.encrypted && !node._decrypted) {
+      print(`head: ${path}: file is encrypted — decrypt first`, 't-warn'); return;
+    }
+    const content = node._decrypted ? node.decryptedContent : node.content;
+    content.split('\n').slice(0, count).forEach(l => print(l));
+    if (node.evidence) node.evidence.forEach(id => { if (NEXORA.isUnlocked(id)) NEXORA.markFound(id); });
+  }
+
+  function cmdEnv() {
+    print(`USER=${isEchoMode ? 'echo_core' : 'user'}`);
+    print(`HOME=${isEchoMode ? '/nexora/echo' : '/nexora'}`);
+    print(`SHELL=/bin/bash`);
+    print(`PWD=${currentDir}`);
+    print(`HOSTNAME=nexora-main`);
+    print(`TERM=xterm-256color`);
+    print(`PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin`);
+    print(`LANG=en_US.UTF-8`);
+    print(`ECHO_CONTINUITY=${NEXORA.getMinutes() >= 60 ? 'ACTIVE' : 'MONITORING'}`);
+  }
+
+  function cmdWhich(name) {
+    if (!name) { print('which: missing command name', 't-error'); return; }
+    const n = name.toLowerCase();
+    if (KNOWN_COMMANDS.includes(n)) {
+      print(`/usr/bin/${n}`);
+    } else {
+      print(`which: no ${name} in (/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin)`, 't-warn');
+    }
+  }
+
+  function cmdMan(name) {
+    if (!name) { print('What manual page do you want?', 't-error'); return; }
+    const n = name.toLowerCase();
+    const usage = MAN_PAGES[n];
+    if (!usage) {
+      print(`No manual entry for ${name}`, 't-warn');
+      return;
+    }
+    print(`${n.toUpperCase()}(1)                       Nexora Shell Manual`, 't-info');
+    print(`NAME`);
+    print(`    ${n} — ${usage.summary}`);
+    print(`SYNOPSIS`);
+    print(`    ${usage.synopsis}`);
+    if (usage.desc) { print(`DESCRIPTION`); print(`    ${usage.desc}`); }
+  }
+
+  // Known command verbs — used by tab completion, `which`, and `man`.
+  const KNOWN_COMMANDS = [
+    'help','ls','cd','cat','grep','find','decrypt','trace','network','reclaim',
+    'netstat','connect','ping','whoami','history','sudo','logs','echo_status',
+    'echo_kill','echo_logs','tail','passwd','nano','code','vi','vim','pwd','date',
+    'uname','hostname','uptime','echo','exit','clear','id','head','env','which','man'
+  ];
+
+  const MAN_PAGES = {
+    ls:      { summary: 'list directory contents', synopsis: 'ls [-a] [-l] [dir]', desc: 'List files. -a shows hidden entries, -l uses long format.' },
+    cd:      { summary: 'change the working directory', synopsis: 'cd [dir]', desc: 'Use .. to move up, ~ for home (/nexora).' },
+    cat:     { summary: 'concatenate and print files', synopsis: 'cat [file]' },
+    grep:    { summary: 'search a file for a term', synopsis: 'grep [term] [file]' },
+    find:    { summary: 'search for files by name', synopsis: 'find [dir] [-name pattern]' },
+    head:    { summary: 'output the first part of a file', synopsis: 'head [-n count] [file]', desc: 'Prints the first 10 lines by default.' },
+    tail:    { summary: 'output the last part of a file', synopsis: 'tail [-f] [file]', desc: '-f follows the stream.' },
+    decrypt: { summary: 'decrypt an encrypted file', synopsis: 'decrypt [file] [key]' },
+    trace:   { summary: 'trace a network route to an IP', synopsis: 'trace [ip]' },
+    netstat: { summary: 'show active network connections', synopsis: 'netstat' },
+    connect: { summary: 'open a session to a server', synopsis: 'connect [server]' },
+    ping:    { summary: 'send an echo request to a host', synopsis: 'ping [host]' },
+    pwd:     { summary: 'print the working directory', synopsis: 'pwd' },
+    whoami:  { summary: 'print the current user', synopsis: 'whoami' },
+    id:      { summary: 'print user and group identity', synopsis: 'id' },
+    env:     { summary: 'print the environment', synopsis: 'env' },
+    which:   { summary: 'locate a command', synopsis: 'which [command]' },
+    man:     { summary: 'display a manual page', synopsis: 'man [command]' },
+    history: { summary: 'show command history', synopsis: 'history' },
+    clear:   { summary: 'clear the terminal screen', synopsis: 'clear' },
+    echo:    { summary: 'connect to the ECHO AI system, or print text in ECHO mode', synopsis: 'echo [text]' },
+    exit:    { summary: 'disconnect from the ECHO AI system', synopsis: 'exit' },
+    uname:   { summary: 'print system information', synopsis: 'uname [-a]' },
+    sudo:    { summary: 'execute a command with elevated privileges', synopsis: 'sudo [command]' },
+    nano:    { summary: 'open a file in the nano editor', synopsis: 'nano [file]' },
+    code:    { summary: 'open a file in the VS Code viewer', synopsis: 'code [file]' },
+  };
+
   // ── INIT ─────────────────────────────────────────────────────
   function printWelcomeNormal() {
     print(`Linux nexora-main 5.15.0-76-generic x86_64
@@ -1164,6 +1311,72 @@ Start investigation: ls /nexora/logs
 `, 't-result');
   }
 
+  // ── TAB COMPLETION ───────────────────────────────────────────
+  function longestCommonPrefix(arr) {
+    if (!arr.length) return '';
+    let p = arr[0];
+    for (const s of arr) {
+      while (p && !s.startsWith(p)) p = p.slice(0, -1);
+      if (!p) break;
+    }
+    return p;
+  }
+
+  function applyCompletion(input, before, pathPrefix, segment, candidates, isDirFn) {
+    if (!candidates || candidates.length === 0) return;
+    if (candidates.length === 1) {
+      const c = candidates[0];
+      const suffix = isDirFn(c) ? '/' : ' ';
+      input.value = before + pathPrefix + c + suffix;
+    } else {
+      const cp = longestCommonPrefix(candidates);
+      if (cp.length > segment.length) {
+        input.value = before + pathPrefix + cp;
+      }
+      // Echo the current line, then list candidates like bash.
+      printPrompt(input.value);
+      print(candidates.map(c => (isDirFn(c) ? c + '/' : c)).join('    '));
+    }
+  }
+
+  function tabComplete(input) {
+    try {
+      const value = input.value;
+      const m = value.match(/(\S*)$/);
+      const token = m ? m[1] : '';
+      const before = value.slice(0, value.length - token.length);
+      const isFirstWord = before.trim() === '';
+
+      if (isFirstWord) {
+        const lower = token.toLowerCase();
+        const cands = KNOWN_COMMANDS.filter(c => c.startsWith(lower));
+        applyCompletion(input, before, '', token, cands, () => false);
+        return;
+      }
+
+      // Filename / directory completion (handles a path prefix).
+      const lastSlash = token.lastIndexOf('/');
+      let dirPath, pathPrefix, segment;
+      if (lastSlash === -1) {
+        dirPath = currentDir;
+        pathPrefix = '';
+        segment = token;
+      } else {
+        pathPrefix = token.slice(0, lastSlash + 1);
+        segment = token.slice(lastSlash + 1);
+        const dirPart = token.slice(0, lastSlash);
+        dirPath = dirPart === '' ? '/nexora' : resolvePath(dirPart);
+      }
+      const node = FS[dirPath];
+      if (!node || node.type !== 'dir' || !Array.isArray(node.children)) return;
+      const names = node.children.filter(c => c.startsWith(segment) && (segment.startsWith('.') || !c.startsWith('.')));
+      applyCompletion(input, before, pathPrefix, segment, names,
+        (name) => FS[dirPath + '/' + name] && FS[dirPath + '/' + name].type === 'dir');
+    } catch (err) {
+      /* completion is best-effort; never break input handling */
+    }
+  }
+
   function setupInput(input) {
     if (!input) return;
     input.addEventListener('keydown', e => {
@@ -1171,6 +1384,9 @@ Start investigation: ls /nexora/logs
         const val = input.value;
         input.value = '';
         processCommand(val);
+      } else if (e.key === 'Tab') {
+        e.preventDefault();
+        tabComplete(input);
       } else if (e.key === 'ArrowUp') {
         e.preventDefault();
         const hist = NEXORA.state.terminalHistory;
