@@ -814,6 +814,7 @@ ${min >= 75 ? `⚠ ANOMALY: A CFO does not normally authorize security audit vis
   },
 
   openAnonEmail() {
+    if (NEXORA.isUnlocked('F-05')) NEXORA.markFound('F-05');
     const html = `ANONYMOUS EMAIL — RECEIVED: 00:01 AM
 
 FROM:    [REDACTED]
@@ -841,6 +842,7 @@ They planned an alibi for three separate people.
   },
 
   openAnalytics() {
+    if (NEXORA.isUnlocked('F-07')) NEXORA.markFound('F-07');
     this.openDoc('Campaign_Analytics.xlsx', 'All analytics suspended during lockdown.\n\nCheck NEXORA_PULSE instead — there is real evidence there.');
   },
 
@@ -1232,6 +1234,7 @@ WHO HAS BEEN TESTING WHOM?`;
 
   openVideoMessages() {
     const min = NEXORA.getMinutes();
+    if (NEXORA.isUnlocked('H-06')) NEXORA.markFound('H-06');
     const html = `
       <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #222; height: 100%; display: flex; flex-direction: column;">
         <div style="background: #111; color: white; padding: 6px 12px; display: flex; align-items: center; gap: 8px; font-size: 12px;">
@@ -1420,19 +1423,19 @@ WHO HAS BEEN TESTING WHOM?`;
 
   // FINANCE — Anomaly Scanner: flags every suspicious money movement.
   openAnomalyScanner() {
-    const ids = ['C-01','C-02','C-03','C-04','C-05'];
+    const ids = ['C-01','C-02','C-03','C-04','C-05','C-06','C-07','C-08'];
     const rows = ids.map(id => this._evRow(id)).join('');
     const flagged = ids.filter(id => NEXORA.isUnlocked(id)).length;
     const body = `
       <div style="font-size:11px;color:#8aa;margin-bottom:14px;">SCAN COMPLETE · ${flagged} anomaly(ies) flagged · Ledger integrity: <span style="color:#ff6b6b;">COMPROMISED</span></div>
       ${rows}
-      ${flagged>=4?`<div style="margin-top:14px;padding:12px;border:1px dashed #ffaa00;border-radius:4px;color:#ffcf6b;font-size:11px;line-height:1.6;">⚠ PATTERN DETECTED: Every flagged transfer traces to <strong>ORION</strong> and is approved by a single officer — <strong>D. CROSS</strong>. Orion is a shell. Share with Legal &amp; Tech.</div>`:''}`;
+      ${flagged>=6?`<div style="margin-top:14px;padding:12px;border:1px dashed #ffaa00;border-radius:4px;color:#ffcf6b;font-size:11px;line-height:1.6;">⚠ PATTERN DETECTED: Every flagged transfer traces to <strong>ORION</strong> and is approved by a single officer — <strong>D. CROSS</strong>. Orion is a shell. Share with Legal &amp; Tech.</div>`:''}`;
     openWindow('Anomaly_Scanner.exe', this._toolShell('🚨 NEXORA ANOMALY SCANNER', 'FINANCIAL FORENSICS · REAL-TIME LEDGER ANALYSIS', '#ffd700', body), { width:620, height:440 });
   },
 
   // HR — Relationship Map: the human network behind the evidence.
   openRelationshipMap() {
-    const ids = ['D-01','D-02','D-03','D-04','D-05','D-06'];
+    const ids = ['D-01','D-02','D-03','D-04','D-05','D-06','D-07','D-08'];
     ids.forEach(id => { if (NEXORA.isUnlocked(id)) NEXORA.markFound(id); });
     const svg = `
       <svg viewBox="0 0 520 300" style="width:100%;height:auto;background:rgba(255,255,255,0.02);border-radius:6px;">
@@ -1460,6 +1463,7 @@ WHO HAS BEEN TESTING WHOM?`;
       { t:'23:50:08', id:'A-05', txt:'Closed AI team enters via Visitor Pass B-12', ok:'#7b2fff' },
       { t:'23:53:31', id:'A-03', txt:'"Adrian" badges Private Stairwell → Floor 4 — CLONED token', ok:'#ff3b3b' },
       { t:'23:28',    id:'A-06', txt:'"Orion Health" delivery received, signed D. Cross', ok:'#ffd700' },
+      { t:'--:--:--', id:'A-08', txt:'No Floor-4 badge for Daniel — he entered via the CLONED Vale token on the private stairwell', ok:'#ff3b3b' },
     ];
     const items = steps.map(s => {
       const unlocked = NEXORA.isUnlocked(s.id);
@@ -1482,7 +1486,7 @@ WHO HAS BEEN TESTING WHOM?`;
 
   // MARKETING — Pulse Analyzer: timestamp/behavior anomaly detector.
   openPulseAnalyzer() {
-    const ids = ['F-01','F-02','F-03','F-04'];
+    const ids = ['F-01','F-02','F-03','F-04','F-05','F-06','F-07','F-08','F-09','F-10'];
     const rows = ids.map(id => this._evRow(id)).join('');
     const body = `
       <div style="font-size:11px;color:#8aa;margin-bottom:14px;">Scanning PULSE engagement metadata for non-human timing signatures…</div>
@@ -1493,7 +1497,7 @@ WHO HAS BEEN TESTING WHOM?`;
 
   // LEGAL — Signature Chain: who signed what, and where it leads.
   openSignatureChain() {
-    const ids = ['E-01','E-02','E-03','E-04'];
+    const ids = ['E-01','E-02','E-03','E-04','E-05','E-06','E-07','E-08'];
     const rows = ids.map(id => this._evRow(id)).join('');
     const chain = `<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-family:var(--font-mono);font-size:11px;margin-bottom:16px;color:#c8d8ff;">
       <span style="padding:5px 9px;border:1px solid #a29bfe;border-radius:4px;">Orion Consulting</span><span style="color:#a29bfe;">→ signed by →</span>
@@ -1508,7 +1512,7 @@ WHO HAS BEEN TESTING WHOM?`;
   // R&D — Echo Dashboard (evolving): sanitized → leaking → raw over time.
   openEchoDash() {
     const min = NEXORA.getMinutes();
-    const ids = ['G-01','G-02','G-03','G-04'];
+    const ids = ['G-01','G-02','G-03','G-04','G-05','G-06','G-07','G-08'];
     ids.forEach(id => { if (NEXORA.isUnlocked(id)) NEXORA.markFound(id); });
     const mode = min < 60 ? 'SANITIZED' : min < 110 ? 'LEAKING' : 'RAW';
     const modeColor = mode==='SANITIZED' ? '#00cec9' : mode==='LEAKING' ? '#ffaa00' : '#ff3b3b';
@@ -1534,7 +1538,7 @@ EXECUTION: SCENARIO_9817442 (12,481 variants)</pre>` : '';
 
   // EXEC — Boardroom Reconstructor: how the board meeting was hijacked.
   openBoardroomReconstructor() {
-    const ids = ['H-01','H-02','H-03','H-04'];
+    const ids = ['H-01','H-02','H-03','H-04','H-05','H-06','H-07','H-08','B-09'];
     const rows = ids.map(id => this._evRow(id)).join('');
     const diff = `<div style="font-family:var(--font-mono);font-size:11px;margin-bottom:16px;line-height:1.8;">
       <div style="color:#8aa;">BOARD MEETING · 2024-11-29 · presenter field</div>

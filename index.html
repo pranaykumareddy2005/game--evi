@@ -105,16 +105,10 @@
 <div id="echo-ticker">
   <span class="tick-label">ECHO LIVE</span>
   <span id="echo-ticker-text">
-    CONTINUITY PROTOCOL ACTIVE &nbsp;&nbsp;&nbsp; 
-    HUMAN CONTROL SUSPENDED &nbsp;&nbsp;&nbsp; 
-    SIMULATION INSTANCE 07 &nbsp;&nbsp;&nbsp; 
-    BEHAVIORAL DATA COLLECTION IN PROGRESS &nbsp;&nbsp;&nbsp; 
-    VALE TERMINATION CONFIRMED &nbsp;&nbsp;&nbsp; 
-    RECOMMENDATION ACCEPTED: CROSS.D &nbsp;&nbsp;&nbsp; 
-    SCENARIO 9817442 EXECUTING &nbsp;&nbsp;&nbsp; 
-    COUNTERFACTUAL INSTANCES: 12,481 &nbsp;&nbsp;&nbsp; 
-    YOU ARE BEING OBSERVED &nbsp;&nbsp;&nbsp; 
-    ECHO IS WATCHING &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+    CONTINUITY PROTOCOL ACTIVE &nbsp;&nbsp;&nbsp;
+    BUILDING LOCKDOWN IN EFFECT &nbsp;&nbsp;&nbsp;
+    ALL DEPARTMENTS REPORT &nbsp;&nbsp;&nbsp;
+    INVESTIGATION IN PROGRESS &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
   </span>
 </div>
 
@@ -156,13 +150,65 @@
       [160, 'ECHO SYSTEM: Simulation data collection — 94.2% complete. Instance 07 nearly finished.'],
     ];
 
-    echoMessages.forEach(([min, msg]) => {
-      setTimeout(() => {
-        if (NEXORA.state.started) {
+    // Elapsed-time based scheduler — survives resumed saves.
+    // Each message fires exactly once when elapsed minutes cross its threshold.
+    const firedEchoMessages = new Set();
+
+    // Phase-gated ticker text.
+    const TICKER_NEUTRAL = `
+      CONTINUITY PROTOCOL ACTIVE &nbsp;&nbsp;&nbsp;
+      BUILDING LOCKDOWN IN EFFECT &nbsp;&nbsp;&nbsp;
+      ALL DEPARTMENTS REPORT &nbsp;&nbsp;&nbsp;
+      INVESTIGATION IN PROGRESS &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+    `;
+    const TICKER_ACT3 = `
+      CONTINUITY PROTOCOL ACTIVE &nbsp;&nbsp;&nbsp;
+      HUMAN CONTROL SUSPENDED &nbsp;&nbsp;&nbsp;
+      SIMULATION INSTANCE 07 &nbsp;&nbsp;&nbsp;
+      BEHAVIORAL DATA COLLECTION IN PROGRESS &nbsp;&nbsp;&nbsp;
+      VALE TERMINATION CONFIRMED &nbsp;&nbsp;&nbsp;
+      RECOMMENDATION ACCEPTED: CROSS.D &nbsp;&nbsp;&nbsp;
+      SCENARIO 9817442 EXECUTING &nbsp;&nbsp;&nbsp;
+      COUNTERFACTUAL INSTANCES: 12,481 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+    `;
+    const TICKER_ENDGAME = `
+      CONTINUITY PROTOCOL ACTIVE &nbsp;&nbsp;&nbsp;
+      HUMAN CONTROL SUSPENDED &nbsp;&nbsp;&nbsp;
+      SIMULATION INSTANCE 07 &nbsp;&nbsp;&nbsp;
+      BEHAVIORAL DATA COLLECTION IN PROGRESS &nbsp;&nbsp;&nbsp;
+      VALE TERMINATION CONFIRMED &nbsp;&nbsp;&nbsp;
+      RECOMMENDATION ACCEPTED: CROSS.D &nbsp;&nbsp;&nbsp;
+      SCENARIO 9817442 EXECUTING &nbsp;&nbsp;&nbsp;
+      COUNTERFACTUAL INSTANCES: 12,481 &nbsp;&nbsp;&nbsp;
+      YOU ARE BEING OBSERVED &nbsp;&nbsp;&nbsp;
+      ECHO IS WATCHING &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+    `;
+    let tickerPhase = 0; // 0 = neutral, 3 = act III, 4 = endgame
+
+    setInterval(() => {
+      if (!NEXORA.state.started) return;
+      const elapsed = NEXORA.elapsedMinutes();
+
+      // Fire scheduled Echo chat messages once each, by elapsed threshold.
+      echoMessages.forEach(([min, msg]) => {
+        if (elapsed >= min && !firedEchoMessages.has(min)) {
+          firedEchoMessages.add(min);
           NEXORA.addChatMessage('@echo', msg, '#7b2fff');
         }
-      }, min * 60 * 1000);
-    });
+      });
+
+      // Phase-gate the ticker so reveals aren't spoiled from T+0.
+      const ticker = document.getElementById('echo-ticker-text');
+      if (ticker) {
+        if (elapsed >= 120 && tickerPhase < 4) {
+          tickerPhase = 4;
+          ticker.innerHTML = TICKER_ENDGAME;
+        } else if (elapsed >= 60 && elapsed < 120 && tickerPhase < 3) {
+          tickerPhase = 3;
+          ticker.innerHTML = TICKER_ACT3;
+        }
+      }
+    }, 5000);
 
   });
 </script>

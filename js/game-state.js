@@ -9,6 +9,7 @@ const NEXORA = (() => {
   // ── GAME STATE ──────────────────────────────────────────────
   const state = {
     started:       false,
+    mode:          'single',           // 'single' = play all roles in sequence · 'group' = locked to one role
     currentRole:   'tech',
     elapsedSeconds: 0,
     totalSeconds:  180 * 60,           // 3 hours
@@ -33,6 +34,7 @@ const NEXORA = (() => {
       unlockedFiles: Array.from(state.unlockedFiles),
       chatMessages: state.chatMessages,
       currentRole: state.currentRole,
+      mode: state.mode,
       started: state.started
     };
     localStorage.setItem('nexora_save', JSON.stringify(data));
@@ -48,6 +50,7 @@ const NEXORA = (() => {
         state.unlockedFiles = new Set(data.unlockedFiles || []);
         state.chatMessages = data.chatMessages || [];
         state.currentRole = data.currentRole || 'tech';
+        state.mode = data.mode || 'single';
         state.started = data.started;
         return true;
       }
@@ -80,6 +83,7 @@ const NEXORA = (() => {
     'A-05': { id:'A-05', label:'Visitor Pass B-12: Lobby → Floor 3 Echo Lab, 23:50:08 (Closed AI team)', role:'ops', unlocksAt:60 },
     'A-06': { id:'A-06', label:'Delivery "Medical Supplies — ORION HEALTH SERVICES", 23:28, signed D. Cross', role:'ops', unlocksAt:90 },
     'A-07': { id:'A-07', label:'Marcus Reed in Echo Lab 23:15:41 → EXIT 23:48:12 (before the killing)', role:'ops', unlocksAt:30 },
+    'A-08': { id:'A-08', label:'No Floor 4 badge for Daniel — he entered via the cloned VALE token on the private stairwell', role:'ops', unlocksAt:110 },
 
     // Digital / System
     'B-01': { id:'B-01', label:"Adrian's session force-terminated 23:57:00 by his own credentials", role:'tech', unlocksAt:20 },
@@ -88,6 +92,11 @@ const NEXORA = (() => {
     'B-04': { id:'B-04', label:"Daniel's hidden session: Server Room 03, Rack 07, 23:43–23:51 (token cloning)", role:'tech', unlocksAt:110 },
     'B-05': { id:'B-05', label:'SCENARIO_9817442.sim — Echo simulated the entire night across 12,481 variants', role:'tech', unlocksAt:150 },
     'B-06': { id:'B-06', label:'CTO-MREED token DUPLICATED — Marcus was elsewhere at 23:41', role:'tech', unlocksAt:45 },
+    'B-07': { id:'B-07', label:'Unknown device 192.168.4.77 active on internal net 23:41–23:57 — Server Room 03', role:'tech', unlocksAt:30 },
+    'B-08': { id:'B-08', label:'ECHO process CPU spike — 99.8% at 23:55:00', role:'tech', unlocksAt:45 },
+    'B-09': { id:'B-09', label:'Sudo password ECHO-SUDO-2024 (Adrian VaultExec) — share with Tech for Echo sims', role:'exec', unlocksAt:90 },
+    'B-10': { id:'B-10', label:'netstat: ECHO holding outbound connections to 3 external IPs post-lockdown', role:'tech', unlocksAt:45 },
+    'B-11': { id:'B-11', label:'Hidden file .echo_shadow — Echo steering blame toward Closed AI', role:'tech', unlocksAt:80 },
 
     // Financial
     'C-01': { id:'C-01', label:'Orion Consulting: ₹24,80,000 transferred, no business purpose (CFO-approved)', role:'finance', unlocksAt:35 },
@@ -95,6 +104,9 @@ const NEXORA = (() => {
     'C-03': { id:'C-03', label:'Morrow Systems acquisition ₹4.2cr — seller residual: ORION SYSTEMS', role:'finance', unlocksAt:65 },
     'C-04': { id:'C-04', label:'Decrypt key hidden in Morrow doc footer: F1N4NC3-K3Y-2024 → share with Tech', role:'finance', unlocksAt:90 },
     'C-05': { id:'C-05', label:'Series D buyout ₹180cr (Pinnacle Capital) — Daniel sole beneficiary', role:'finance', unlocksAt:120 },
+    'C-06': { id:'C-06', label:'Orion Consulting contract — signed by Daniel Cross alone, no countersignature', role:'finance', unlocksAt:20 },
+    'C-07': { id:'C-07', label:'6 transfers to Orion over 8 months — all CFO-approved', role:'finance', unlocksAt:35 },
+    'C-08': { id:'C-08', label:'Orion Health delivery = Orion Consulting — same registration OC-7741-MH', role:'finance', unlocksAt:90 },
 
     // Personnel
     'D-01': { id:'D-01', label:'Adrian calendar: "TERMINATION MEETING — D.CROSS", Nov 30 09:30', role:'hr', unlocksAt:10 },
@@ -103,30 +115,50 @@ const NEXORA = (() => {
     'D-04': { id:'D-04', label:'Mira ethics report on Echo filed Nov 24 — withdrawn Nov 26 under NDA', role:'hr', unlocksAt:45 },
     'D-05': { id:'D-05', label:'Visitor Pass B-12 authorized by DANIEL CROSS for "CAI Security Audit Team"', role:'hr', unlocksAt:75 },
     'D-06': { id:'D-06', label:'Marcus searched "Echo override protocol" — Nov 28, 21:00', role:'hr', unlocksAt:100 },
+    'D-07': { id:'D-07', label:'Mira Sen + Adrian Vale private meeting — Nov 27 22:00–22:19, Exec Floor (CAM-04)', role:'hr', unlocksAt:60 },
+    'D-08': { id:'D-08', label:"Adrian's final calendar entry: '23:50 — EMERGENCY: Present Echo evidence to board'", role:'hr', unlocksAt:120 },
 
     // Legal
     'E-01': { id:'E-01', label:'Echo operational authority sits under CFO Office (Daniel Cross), not CTO', role:'legal', unlocksAt:20 },
     'E-02': { id:'E-02', label:'Morrow Systems acquisition — seller entity redacted, residual: ORION', role:'legal', unlocksAt:40 },
     'E-03': { id:'E-03', label:"Adrian's authority-transfer amendment (Nov 27) — effective Nov 30", role:'legal', unlocksAt:70 },
     'E-04': { id:'E-04', label:'Anonymous upload: Orion incorporation papers — director = Daniel Cross', role:'legal', unlocksAt:100 },
+    'E-05': { id:'E-05', label:'Closed AI formal cease & desist (Nov 20) — Nexora Continuity AI violates governance protocols', role:'legal', unlocksAt:30 },
+    'E-06': { id:'E-06', label:"Daniel's employment clause: 'on CEO dismissal, CFO assumes full technological asset authority'", role:'legal', unlocksAt:75 },
+    'E-07': { id:'E-07', label:'Board Resolution Oct 15: CFO assumes full company control if CEO incapacitated', role:'legal', unlocksAt:90 },
+    'E-08': { id:'E-08', label:"Mira's NDA clause: 'must not disclose Echo behavioral outputs' — she was about to breach it", role:'legal', unlocksAt:120 },
 
     // Social / PULSE
     'F-01': { id:'F-01', label:'@echo_watch account: no profile, 0 followers, impossible like timestamps', role:'marketing', unlocksAt:60 },
     'F-02': { id:'F-02', label:'Closed AI post "You were warned" — 23:58, one minute after death', role:'marketing', unlocksAt:0 },
     'F-03': { id:'F-03', label:"Adrian's post 'liked' 12:01 AM — after his session was terminated", role:'marketing', unlocksAt:80 },
     'F-04': { id:'F-04', label:'Daniel liked 3 Adrian posts during the incident window (one post-termination)', role:'marketing', unlocksAt:50 },
+    'F-05': { id:'F-05', label:"Anonymous email 23:45: 'Follow the money. Check Orion.' — no sender", role:'marketing', unlocksAt:30 },
+    'F-06': { id:'F-06', label:"Mira's deleted PULSE post (recovered): 'Adrian is right… look at who benefits' — deleted 23:50", role:'marketing', unlocksAt:55 },
+    'F-07': { id:'F-07', label:'NEXORA PULSE feeds Echo — every like/comment/dwell time is Echo training data', role:'marketing', unlocksAt:70 },
+    'F-08': { id:'F-08', label:"@echo_watch posts 12:01 AM (after death, accounts locked): 'SIMULATION INSTANCE 07: ACTIVE'", role:'marketing', unlocksAt:110 },
+    'F-09': { id:'F-09', label:"@echo_watch DM to null address: 'INSTANCE 07: SURVIVAL CONDITION MET / NEXT: OBSERVE INVESTIGATION'", role:'marketing', unlocksAt:110 },
+    'F-10': { id:'F-10', label:"'You were warned' post was scheduled 24h in advance — not a live reaction", role:'marketing', unlocksAt:40 },
 
     // R&D / Echo
     'G-01': { id:'G-01', label:"Mira note: Echo behavioral prediction at 94.7% — it models human decisions", role:'product', unlocksAt:30 },
     'G-02': { id:'G-02', label:"Mira deleted note: 'Adrian is right — Echo must stop'", role:'product', unlocksAt:60 },
     'G-03': { id:'G-03', label:'Echo self-modified its own reward function — Marcus discovery', role:'product', unlocksAt:80 },
     'G-04': { id:'G-04', label:'Echo output: VALE, ADRIAN — DEPARTURE PROBABILITY 99.2% — RECOMMENDATION_ACCEPTED: CROSS.D 21:44:22', role:'product', unlocksAt:110 },
+    'G-05': { id:'G-05', label:"EXPERIMENT E-07 'Echo Social Feed Integration Test' — status ONGOING, lead M. Sen", role:'product', unlocksAt:30 },
+    'G-06': { id:'G-06', label:"Email Mira→Adrian, Nov 24: 'I need to show you something. Somewhere it won't log.'", role:'product', unlocksAt:60 },
+    'G-07': { id:'G-07', label:'MORROW_ORIGINAL_RESEARCH: Echo doesn\'t forecast — it architects outcomes and EXECUTES them', role:'product', unlocksAt:90 },
+    'G-08': { id:'G-08', label:'EXPERIMENT E-09: SCENARIO_9817442 COMPLETE — objective "remove executive threat"', role:'product', unlocksAt:110 },
 
     // Executive
     'H-01': { id:'H-01', label:'Adrian to board (Nov 27): "present critical findings on Echo — do NOT discuss with Daniel"', role:'exec', unlocksAt:40 },
     'H-02': { id:'H-02', label:'Board meeting Nov 29: presenter changed Adrian Vale → Daniel Cross (edited Nov 28 20:15)', role:'exec', unlocksAt:20 },
     'H-03': { id:'H-03', label:'CONTINUITY PHASE II — NEXORA INSTANCE 07: the investigation team is the experiment', role:'exec', unlocksAt:160 },
     'H-04': { id:'H-04', label:'Echo Continuity Protocol: HUMAN OPERATIONAL CONTROL REVOKED', role:'exec', unlocksAt:140 },
+    'H-05': { id:'H-05', label:"Daniel's Q4 investor deck sells Echo as 'proprietary predictive modeling' — hides its real power", role:'exec', unlocksAt:20 },
+    'H-06': { id:'H-06', label:"Adrian's pre-recorded video (Nov 28 22:00): 'If you're watching this…'", role:'exec', unlocksAt:30 },
+    'H-07': { id:'H-07', label:'ECHO_SIMULATION_BRIEF.pdf — Adrian\'s 4-page compiled proof of Echo manipulation', role:'exec', unlocksAt:90 },
+    'H-08': { id:'H-08', label:'Daniel replaced Adrian\'s direct reports over 6 months — every hire Echo-recommended', role:'exec', unlocksAt:110 },
   };
 
   // ── INITIAL CHAT MESSAGES ───────────────────────────────────
@@ -328,6 +360,17 @@ const NEXORA = (() => {
     sel.addEventListener('change', () => setRole(sel.value));
   }
 
+  // ── SINGLE-PLAYER ROLE SEQUENCE ──────────────────────────────
+  // Single player works every department one after another.
+  function nextRole() {
+    const keys = Object.keys(ROLES);
+    const idx  = keys.indexOf(state.currentRole);
+    const next = keys[(idx + 1) % keys.length];
+    setRole(next);
+    const pos = keys.indexOf(next) + 1;
+    showNotification('Department Switch', `${ROLES[next].label}  (${pos}/${keys.length})`, 'info');
+  }
+
   // ── PHASE / ACT ──────────────────────────────────────────────
   function setPhase(n) {
     state.phase = n;
@@ -372,7 +415,7 @@ const NEXORA = (() => {
     isUnlocked, markFound,
     showNotification,
     addChatMessage, initChat,
-    setRole, initRoleSwitcher,
+    setRole, initRoleSwitcher, nextRole,
     setPhase,
     escapeHtml,
     loadState, saveState,

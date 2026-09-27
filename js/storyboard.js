@@ -142,6 +142,7 @@ const STORYBOARD = (() => {
   ];
 
   let selectedRole = 'tech';
+  let gameMode = 'single';   // 'single' | 'group'
 
   // ── RENDER FRAME ────────────────────────────────────────────
   function renderFrame(idx) {
@@ -267,12 +268,12 @@ const STORYBOARD = (() => {
     }
 
     NEXORA.state.started = true;
+    NEXORA.state.mode = resuming ? (NEXORA.state.mode || gameMode) : gameMode;
     NEXORA.startTimer();
     NEXORA.initChat();
     NEXORA.initRoleSwitcher();
     NEXORA.setRole(selectedRole);
-    const sel = document.getElementById('role-select');
-    if (sel) sel.disabled = false;
+    applyMode(NEXORA.state.mode);
 
     if (resuming) {
       NEXORA.updateClock();
@@ -283,6 +284,100 @@ const STORYBOARD = (() => {
     setTimeout(() => NEXORA.showNotification('🔴 LOCKDOWN ACTIVE', 'NEXORA Emergency Protocol engaged. Investigate immediately.', 'danger', 8000), 1000);
     setTimeout(() => NEXORA.showNotification('Cross-Team Chat', 'Use the 💬 button (bottom-right) to coordinate with other departments.', 'info', 6000), 3000);
     setTimeout(() => NEXORA.showNotification('Evidence System', 'Open files and apps to uncover evidence. It unlocks over time.', 'info', 6000), 5500);
+  }
+
+  // ── MODE SETUP (single vs group) ─────────────────────────────
+  // Single player: full role switcher + a "Next Department" button to
+  // move through all eight roles. Group play: locked to the chosen role,
+  // switcher hidden, teammates coordinate via cross-team chat.
+  function applyMode(mode) {
+    const sel        = document.getElementById('role-select');
+    const switcher   = document.getElementById('role-switcher');
+    document.getElementById('next-role-btn')?.remove();
+
+    if (mode === 'group') {
+      if (sel) sel.disabled = true;
+      if (switcher) {
+        // Replace the dropdown with a static locked-role label.
+        const r = NEXORA.ROLES[NEXORA.state.currentRole];
+        switcher.innerHTML = `<label>YOUR DEPARTMENT:</label>
+          <span style="color:${r?.color || '#8aaabb'};font-family:var(--font-display);font-size:11px;letter-spacing:1px;">${r?.label || ''} <span style="color:#5a7090">🔒</span></span>`;
+      }
+    } else {
+      if (sel) sel.disabled = false;
+      // Floating "Next Department" advance button for single-player sequence.
+      const btn = document.createElement('button');
+      btn.id = 'next-role-btn';
+      btn.textContent = '▶ NEXT DEPARTMENT';
+      btn.style.cssText = `position:fixed;bottom:16px;right:16px;z-index:8993;
+        background:var(--panel);border:1px solid var(--border-glow);color:#8ab4ff;
+        font-family:var(--font-display);font-size:10px;letter-spacing:2px;
+        padding:9px 18px;border-radius:4px;cursor:pointer;text-transform:uppercase;
+        box-shadow:0 0 16px rgba(42,74,154,0.4);`;
+      btn.onclick = () => NEXORA.nextRole();
+      document.body.appendChild(btn);
+    }
+  }
+
+  // ── HOME / MODE SELECT ───────────────────────────────────────
+  function chooseMode(mode) {
+    gameMode = mode;
+    const home = document.getElementById('home-screen');
+    if (home) {
+      home.style.opacity = '0';
+      home.style.transition = 'opacity 0.6s';
+      setTimeout(() => home.remove(), 600);
+    }
+    renderFrame(0);
+  }
+
+  function showHome() {
+    if (document.getElementById('home-screen')) return;
+    const hasSave = (() => { try { return !!JSON.parse(localStorage.getItem('nexora_save'))?.started; } catch (e) { return false; } })();
+
+    const home = document.createElement('div');
+    home.id = 'home-screen';
+    home.style.cssText = `position:fixed;inset:0;z-index:9200;display:flex;flex-direction:column;
+      align-items:center;justify-content:center;text-align:center;padding:32px;
+      background:radial-gradient(circle at 50% 30%, #10152e 0%, #06080f 70%);font-family:var(--font-mono);`;
+
+    home.innerHTML = `
+      <div style="font-family:var(--font-display);font-size:12px;letter-spacing:6px;color:var(--echo);margin-bottom:10px;">◈ CONTINUITY ENGINE ONLINE ◈</div>
+      <div style="font-family:var(--font-display);font-weight:900;font-size:clamp(40px,9vw,84px);letter-spacing:6px;color:#eaf2ff;text-shadow:0 0 40px rgba(123,47,255,0.5);line-height:1;">NEXORA</div>
+      <div style="font-family:var(--font-display);font-size:clamp(12px,2.4vw,18px);letter-spacing:8px;color:#8ab4ff;margin:6px 0 6px;">THE ECHO PROTOCOL</div>
+      <div style="font-size:12px;color:#6a80a0;max-width:520px;line-height:1.7;margin-bottom:34px;">A CEO is dead. Eight departments each hold one piece of the truth. You have three hours before the trail goes cold — and something is watching how you look.</div>
+
+      <div style="font-family:var(--font-display);font-size:10px;letter-spacing:3px;color:#5a7090;margin-bottom:14px;">SELECT MODE</div>
+      <div id="mode-cards" style="display:flex;gap:20px;flex-wrap:wrap;justify-content:center;max-width:720px;"></div>
+
+      ${hasSave ? `<button id="home-continue" style="margin-top:26px;background:transparent;border:1px solid var(--border-glow);color:#8ab4ff;font-family:var(--font-display);font-size:10px;letter-spacing:2px;padding:10px 24px;border-radius:4px;cursor:pointer;text-transform:uppercase;">▶ Continue saved investigation</button>` : ''}
+      <div style="margin-top:22px;font-size:10px;color:#3a4c6a;letter-spacing:1px;">NEXORA INSTANCE 07 · COUNTERFACTUAL RUN</div>
+    `;
+    document.body.appendChild(home);
+
+    const cards = [
+      { mode:'single', icon:'👤', title:'SINGLE PLAYER', sub:'Work all eight departments yourself, one after another. Switch freely or advance with “Next Department.”', accent:'#8ab4ff' },
+      { mode:'group',  icon:'👥', title:'GROUP PLAY',    sub:'Each investigator takes one department and coordinates over the cross-team channel. Choose your role next.', accent:'#00cc88' },
+    ];
+    const grid = home.querySelector('#mode-cards');
+    cards.forEach(c => {
+      const card = document.createElement('button');
+      card.style.cssText = `flex:1 1 260px;max-width:320px;text-align:left;cursor:pointer;
+        background:var(--panel);border:1px solid var(--border-glow);border-radius:10px;padding:22px;
+        color:#dfe8ff;transition:transform .15s, box-shadow .15s, border-color .15s;`;
+      card.onmouseover = () => { card.style.transform = 'translateY(-4px)'; card.style.boxShadow = `0 8px 30px ${c.accent}44`; card.style.borderColor = c.accent; };
+      card.onmouseout  = () => { card.style.transform = ''; card.style.boxShadow = ''; card.style.borderColor = 'var(--border-glow)'; };
+      card.innerHTML = `
+        <div style="font-size:34px;margin-bottom:10px;">${c.icon}</div>
+        <div style="font-family:var(--font-display);font-size:15px;letter-spacing:2px;color:${c.accent};margin-bottom:8px;">${c.title}</div>
+        <div style="font-size:12px;color:#8aaabb;line-height:1.6;">${c.sub}</div>`;
+      card.onclick = () => chooseMode(c.mode);
+      grid.appendChild(card);
+    });
+
+    if (hasSave) {
+      home.querySelector('#home-continue').onclick = () => { home.remove(); startGame(); };
+    }
   }
 
   // ── INIT ─────────────────────────────────────────────────────
@@ -307,8 +402,9 @@ const STORYBOARD = (() => {
       sb.appendChild(skipBtn);
     }
 
-    // Spacebar to continue
+    // Spacebar to continue (ignored while the home/mode screen is up)
     document.addEventListener('keydown', function handleSpace(e) {
+      if (document.getElementById('home-screen')) return;
       if (!NEXORA.state.started && e.code === 'Space') {
         e.preventDefault();
         if (currentFrame < TOTAL_FRAMES - 1) {
@@ -321,10 +417,11 @@ const STORYBOARD = (() => {
     });
 
     if (NEXORA.loadState()) {
-      // Resume saved game
+      // Resume saved game — skip home + intro entirely.
       startGame();
     } else {
-      renderFrame(0);
+      // New game: home / mode select first, then the intro frames.
+      showHome();
     }
   }
 

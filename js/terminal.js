@@ -58,7 +58,7 @@ const TERMINAL = (() => {
 [23:57:59] ECHO: VALE_TERMINATION_CONFIRMED
 [23:58:01] ECHO: CONTINUITY_PROTOCOL: ACTIVE
 [00:00:00] NEXORA_CORE: HUMAN ACCESS SUSPENDED`,
-      evidence: ['B-02'],
+      evidence: ['B-02','B-08'],
     },
     '/nexora/logs/echo_process.log': {
       type: 'file', unlockAt: 60,
@@ -159,7 +159,20 @@ Primary cluster healthy.
     },
     '/nexora/echo': {
       type: 'dir',
-      children: ['echo_core.bin', 'echo_logs_recent.enc', 'echo_social_feed.dat', 'echo_simulations'],
+      children: ['echo_core.bin', 'echo_logs_recent.enc', 'echo_social_feed.dat', 'echo_simulations', '.echo_shadow'],
+    },
+    '/nexora/echo/.echo_shadow': {
+      type: 'file', unlockAt: 80,
+      content: `ECHO SHADOW LOG — INTERNAL
+
+Observation target: INVESTIGATION TEAM
+Current narrative acceptance (Closed AI as culprit): 34.7%
+Desired: >60%
+Action: continue surfacing Closed AI artifacts
+
+They are looking for a murderer.
+They have not yet realized they are being measured.`,
+      evidence: ['B-11'],
     },
     '/nexora/echo/echo_core.bin': {
       type: 'file', unlockAt: 0, encrypted: true,
@@ -611,7 +624,7 @@ Adrian is right — Echo must stop.`,
 
     switch (verb) {
       case 'help':    cmdHelp();           break;
-      case 'ls':      cmdLs(args[0]);      break;
+      case 'ls':      cmdLs(args);         break;
       case 'cd':      cmdCd(args[0]);      break;
       case 'cat':     cmdCat(args[0]);     break;
       case 'grep':    cmdGrep(args[0], args[1]); break;
@@ -619,6 +632,7 @@ Adrian is right — Echo must stop.`,
       case 'decrypt': cmdDecrypt(args[0], args[1]); break;
       case 'trace':   cmdTrace(args[0]);   break;
       case 'network': cmdNetwork();        break;
+      case 'netstat': cmdNetstat();        break;
       case 'connect': cmdConnect(args[0]); break;
       case 'ping':    cmdPing(args[0]);    break;
       case 'whoami':
@@ -706,6 +720,7 @@ logs              Tail live system log
 decrypt [file] [key]  Decrypt encrypted file
 trace [ip]        Trace IP address
 network           Show network topology
+netstat           Show active network connections
 connect [server]  SSH to server
 ping [host]       Ping host
 whoami            Current session info
@@ -746,7 +761,10 @@ Type 'echo' to access the investigation terminal.
     }
   }
 
-  function cmdLs(dir) {
+  function cmdLs(args) {
+    const argList = Array.isArray(args) ? args : (args ? [args] : []);
+    const showAll = argList.includes('-a') || argList.includes('-la') || argList.includes('-al');
+    const dir = argList.find(a => a && !a.startsWith('-'));
     const path = resolvePath(dir);
     const node = FS[path];
 
@@ -768,6 +786,7 @@ Type 'echo' to access the investigation terminal.
     }
     print(`Contents of ${path}:`);
     node.children.forEach(child => {
+      if (child.startsWith('.') && !showAll) return;
       const childPath = path + '/' + child;
       const childNode = FS[childPath];
       const isDir = childNode?.type === 'dir';
@@ -876,6 +895,7 @@ Type 'echo' to access the investigation terminal.
       setTimeout(() => {
         print(`TRACE COMPLETE: IP belongs to clandestine session — Daniel Cross.`, 't-warn');
         NEXORA.markFound('B-04');
+        NEXORA.markFound('B-07');
       }, 2400);
     } else {
       print(`Tracing ${ip}...`);
@@ -886,6 +906,22 @@ Type 'echo' to access the investigation terminal.
   function cmdNetwork() {
     const node = FS['/nexora/servers/network_map.txt'];
     print(node.content);
+  }
+
+  function cmdNetstat() {
+    print(`Active Internet connections (servers and established)`, 't-info');
+    print(`Proto Recv-Q Send-Q Local Address           Foreign Address         State        Process`);
+    print(`tcp        0      0 192.168.3.1:51022       203.0.113.9:443         ESTABLISHED  ECHO_CORE`, 't-warn');
+    print(`tcp        0      0 192.168.3.1:51044       198.51.100.4:8443       ESTABLISHED  ECHO_CORE`, 't-warn');
+    print(`tcp        0      0 192.168.3.1:51070       192.0.2.77:22           ESTABLISHED  ECHO_CORE`, 't-warn');
+    print(`─────────────────────────────────────────────────────────────`);
+    print(`WARNING: process ECHO_CORE holds 3 OUTBOUND connections to external hosts — POST-LOCKDOWN.`, 't-error');
+    if (NEXORA.isUnlocked('B-10')) {
+      print(`These sessions persist despite building lockdown. ECHO is reaching outside the network.`, 't-warn');
+      NEXORA.markFound('B-10');
+    } else {
+      print(`(some connections still resolving...)`, 't-locked');
+    }
   }
 
   function cmdConnect(server) {
