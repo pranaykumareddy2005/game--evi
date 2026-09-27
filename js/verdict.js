@@ -180,7 +180,7 @@ const VERDICT = (() => {
   function showEnding(score, perQuestion, echoAction) {
     // Stop the clock — the investigation is over.
     if (NEXORA.state.timerInterval) clearInterval(NEXORA.state.timerInterval);
-    try { localStorage.removeItem('nexora_save'); } catch (e) {}
+    try { localStorage.removeItem('nexora_save'); localStorage.removeItem('nexora_board'); } catch (e) {}
 
     const tier = score >= 80
       ? { label: 'DIMENSION STABLE', sub: 'You reached the truth beneath the murder.', color: 'var(--safe)' }

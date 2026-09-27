@@ -309,7 +309,7 @@ const STORYBOARD = (() => {
       const btn = document.createElement('button');
       btn.id = 'next-role-btn';
       btn.textContent = '▶ NEXT DEPARTMENT';
-      btn.style.cssText = `position:fixed;bottom:16px;right:16px;z-index:8993;
+      btn.style.cssText = `position:fixed;bottom:16px;right:76px;z-index:8993;
         background:var(--panel);border:1px solid var(--border-glow);color:#8ab4ff;
         font-family:var(--font-display);font-size:10px;letter-spacing:2px;
         padding:9px 18px;border-radius:4px;cursor:pointer;text-transform:uppercase;
@@ -510,8 +510,11 @@ const STORYBOARD = (() => {
       startBtn.textContent = '⚡ START INVESTIGATION';
       startBtn.onclick = () => {
         try { NET.startGame(); } catch (e) { /* fall through to local boot */ }
-        // onStart will fire for all clients (incl. host) and boot.
-        // gameBooted guards against a double boot if it fires twice.
+        // Broadcasts use self:false, so the host never receives its own
+        // 'start' event — boot the host locally here. The gameBooted guard
+        // prevents a double boot; joiners boot via their onStart listener.
+        removeLobbyOverlay();
+        startGame();
       };
       area.appendChild(startBtn);
     } else {

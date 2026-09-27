@@ -231,7 +231,9 @@ const NET = (() => {
 
 })();
 
-// Attempt init on load (harmless no-op without config/SDK).
+// Expose globally (a bare top-level const is NOT a window property) and
+// attempt init on load (harmless no-op without config/SDK).
 if (typeof window !== 'undefined') {
+  window.NET = NET;
   try { NET.init(); } catch (e) {}
 }
