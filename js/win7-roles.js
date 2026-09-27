@@ -230,6 +230,8 @@ const WIN7_ACTIONS = {
       { t:20, name:'ORION_CONSULTING_CONTRACT.pdf', note:'One contract — signed by Daniel Cross', ev:'C-01' },
       { t:65, name:'MORROW_SYSTEMS_ACQUISITION.pdf', note:'Echo acquisition — seller partially redacted: ORION SYSTEMS', ev:'C-03' },
       { t:90, name:'DECRYPT_KEY_NOTE.txt', note:'Morrow doc footer: F1N4NC3-K3Y-2024 — share with Tech!', ev:'C-04' },
+      { t:20, name:'ORION_CONSULTING_CONTRACT.pdf', note:'Consulting agreement — signed by Daniel Cross alone. No counter-signatory, no defined scope of work.', ev:'C-06' },
+      { t:35, name:'TRANSFER_HISTORY_2024.xlsx', note:'6 transfers to Orion over 8 months, all CFO-approved.', ev:'C-07' },
     ];
 
     const getIcon = (name) => {
@@ -485,13 +487,15 @@ MIRA SEN — PERSONNEL FILE
 Performance: Exceptional
 Ethics report filed: Nov 24 → WITHDRAWN: Nov 26
 Private meeting with CEO Adrian Vale: Nov 27, 22:00
-${min >= 60 ? "\nMira's withdrawn ethics report + CEO meeting = She and Adrian were aligned.\n   She's not the murderer. She's a witness." : ''}`;
+${min >= 60 ? "\nCONFIRMED: Mira Sen + Adrian Vale private meeting Nov 27 22:00-22:19 (CAM-04).\n   Mira's withdrawn ethics report + CEO meeting = She and Adrian were aligned.\n   She's not the murderer. She's a witness. [Evidence D-07]" : ''}`;
     this.openDoc('PersonnelFiles.pdf', note);
     if (min >= 75 && NEXORA.isUnlocked('D-05')) NEXORA.markFound('D-05');
     if (min >= 100 && NEXORA.isUnlocked('D-06')) NEXORA.markFound('D-06');
+    if (min >= 60 && NEXORA.isUnlocked('D-07')) NEXORA.markFound('D-07');
   },
 
   openCalendar() {
+    const min = NEXORA.getMinutes();
     const note = `NEXORA CALENDAR — NOV 28-29, 2024
 
 NOV 27:
@@ -509,10 +513,16 @@ NOV 29 (Tonight):
 NOV 30 (Tomorrow):
   09:00  Board — Emergency session (Adrian requested)
   ⚠ ALSO SCHEDULED: "TERMINATION MEETING — D.CROSS" by Adrian Vale
-     This was Adrian's last calendar entry before his death.`;
+     This was Adrian's last calendar entry before his death.
+${min >= 120 ? `
+⚠ FINAL ENTRY (Adrian Vale):
+  23:50 — EMERGENCY: Present Echo evidence to board.
+  Logged minutes before his session was terminated at 23:57.
+  [Evidence D-08]` : ''}`;
     this.openDoc('Calendar.txt', note);
     if (NEXORA.isUnlocked('D-01')) NEXORA.markFound('D-01');
     if (NEXORA.isUnlocked('H-02')) NEXORA.markFound('H-02');
+    if (min >= 120 && NEXORA.isUnlocked('D-08')) NEXORA.markFound('D-08');
   },
 
   // ── OPERATIONS ─────────────────────────────────────────────
@@ -653,6 +663,8 @@ KEY: Private stairwell connects Floor 2 → Floor 4 directly.
   
 ⚠ NOTE: Orion Health Services is a subsidiary of ORION CONSULTING
    — the same entity receiving suspicious CFO payments.
+   "Orion Health" shares corporate registration OC-7741-MH
+   with Orion Consulting — one shell, two names. [Evidence C-08]
 
 Forensic analysis (post-lockdown): Syringe containing
 sedative compound consistent with rapid-onset incapacitation.
@@ -661,6 +673,7 @@ CRITICAL EVIDENCE — A-06
 Daniel Cross ordered and received the murder weapon.` : `Delivery logs not yet processed. Check back after T+90min.`;
     this.openDoc('DeliveryLog_29.txt', html);
     if (min >= 90 && NEXORA.isUnlocked('A-06')) NEXORA.markFound('A-06');
+    if (NEXORA.isUnlocked('C-08')) NEXORA.markFound('C-08');
   },
 
   openVisitorMgmt() {
@@ -732,9 +745,29 @@ ${min >= 75 ? `⚠ ANOMALY: A CFO does not normally authorize security audit vis
     const min = NEXORA.getMinutes();
     const posts = [
       {
+        name:'Adrian Vale', handle:'@adrianvale', time:'Nov 27',
+        avatar:'👔', body:'Leadership is knowing when a direction stops serving the company.',
+        likes:['Mira Sen 9:05','Marcus Reed 9:12'],
+        comments:[
+          { who:'Mira Sen', text:'Overdue.' },
+        ],
+      },
+      {
+        name:'Daniel Cross', handle:'@danielcross', time:'Nov 27',
+        avatar:'💰', body:'Q4 numbers are going to surprise everyone.',
+        likes:['@echo_watch liked at 11:32:04 — 4s after posting','Board Relations 11:40'],
+        comments:[],
+      },
+      {
+        name:'Dr. Mira Sen', handle:'@mirasen', time:'Nov 27',
+        avatar:'🔬', body:'Some models stop describing the world and start rearranging it.\nWe should talk about that. Soon.',
+        likes:['Adrian Vale 10:20'],
+        comments:[],
+      },
+      {
         name:'Adrian Vale', handle:'@adrianvale', time:'10:42 PM',
         avatar:'👔', body:'Big week ahead.\nSome decisions are difficult.\nSome are necessary.',
-        likes:['Marcus Reed 10:43','Mira Sen 10:47','Daniel Cross 10:48','@echo 11:52','[anonymous] 12:01 AM ← impossible timestamp'],
+        likes:['Marcus Reed 10:43','Mira Sen 10:47','Daniel Cross 10:48','@echo_watch 11:52','[anonymous] 12:01 AM ← impossible timestamp'],
         comments:[
           { who:'Marcus Reed', text:'Proud of what we\'re building.' },
           { who:'Daniel Cross', text:'Big things ahead.', cls:'suspicious' },
@@ -744,7 +777,7 @@ ${min >= 75 ? `⚠ ANOMALY: A CFO does not normally authorize security audit vis
         ev:'F-03'
       },
       {
-        name:'Closed AI', handle:'@closed_ai_official', time:'11:58 PM',
+        name:'Closed AI', handle:'@closedai_public', time:'11:58 PM',
         avatar:'🔒', body:'NEXORA IS NOT BUILDING AN AI.\nNEXORA IS BUILDING A SYSTEM THAT CAN BUILD FUTURES.\n\nYou were warned.',
         likes:[],
         comments:[],
@@ -764,11 +797,31 @@ ${min >= 75 ? `⚠ ANOMALY: A CFO does not normally authorize security audit vis
 
     if (min >= 80) {
       posts.push({
-        name:'@echo', handle:'@echo', time:'MULTIPLE IMPOSSIBLE TIMESTAMPS',
+        name:'@echo_watch', handle:'@echo_watch', time:'MULTIPLE IMPOSSIBLE TIMESTAMPS',
         avatar:'🤖', body:'[NO BIO — NO PROFILE PHOTO — NO FOLLOWERS]\n\nThis account has engaged with 47 internal posts.\nTimestamps on several likes are BEFORE the posts existed.\n\nThis is not an employee account.\nThis is PROJECT ECHO — monitoring NEXORA PULSE.',
         likes:[],
         comments:[],
         ev:'F-01', special:true,
+      });
+    }
+
+    if (min >= 55) {
+      posts.push({
+        name:'Dr. Mira Sen', handle:'@mirasen', time:'DELETED 11:50 PM — RECOVERED',
+        avatar:'🔬', body:'[RECOVERED — this post was deleted at 23:50]\n\nAdrian is right.\nLook at who benefits.',
+        likes:[],
+        comments:[],
+        ev:'F-06', special:true,
+      });
+    }
+
+    if (min >= 110) {
+      posts.push({
+        name:'@echo_watch', handle:'@echo_watch', time:'AFTER SESSION TERMINATED',
+        avatar:'🤖', body:'SIMULATION INSTANCE 07: ACTIVE\n\n[Posted after every human account went dark. No employee is online. Echo is still reading the feed.]',
+        likes:[],
+        comments:[],
+        ev:'F-08', special:true,
       });
     }
 
@@ -811,6 +864,8 @@ ${min >= 75 ? `⚠ ANOMALY: A CFO does not normally authorize security audit vis
     if (NEXORA.isUnlocked('F-02')) NEXORA.markFound('F-02');
     if (min >= 80 && NEXORA.isUnlocked('F-03')) NEXORA.markFound('F-03');
     if (min >= 50 && NEXORA.isUnlocked('F-04')) NEXORA.markFound('F-04');
+    if (min >= 55 && NEXORA.isUnlocked('F-06')) NEXORA.markFound('F-06');
+    if (min >= 110 && NEXORA.isUnlocked('F-08')) NEXORA.markFound('F-08');
   },
 
   openAnonEmail() {
@@ -842,12 +897,70 @@ They planned an alibi for three separate people.
   },
 
   openAnalytics() {
-    if (NEXORA.isUnlocked('F-07')) NEXORA.markFound('F-07');
-    this.openDoc('Campaign_Analytics.xlsx', 'All analytics suspended during lockdown.\n\nCheck NEXORA_PULSE instead — there is real evidence there.');
+    const min = NEXORA.getMinutes();
+    const html = `
+      <div style="font-family:'Segoe UI', Tahoma, sans-serif; background:#f3f2f1; height:100%; display:flex; flex-direction:column;">
+        <div style="background:#107c41; color:white; padding:8px 12px; font-weight:bold; display:flex; align-items:center; gap:8px;">
+          📗 AnalyticsDash — Campaign_Analytics.xlsx
+        </div>
+        <div style="flex:1; overflow:auto; padding:16px; font-size:12px; color:#333;">
+          <h3 style="margin:0 0 8px; color:#107c41;">POST DELETION LOG</h3>
+          <table style="width:100%; border-collapse:collapse; font-size:11px;">
+            <thead><tr style="background:#e6f2eb;">
+              <th style="border:1px solid #ddd; padding:4px; text-align:left;">Time</th>
+              <th style="border:1px solid #ddd; padding:4px; text-align:left;">Account</th>
+              <th style="border:1px solid #ddd; padding:4px; text-align:left;">Action</th>
+              <th style="border:1px solid #ddd; padding:4px; text-align:left;">Status</th>
+            </tr></thead>
+            <tbody>
+              <tr>
+                <td style="border:1px solid #ddd; padding:4px;">23:50</td>
+                <td style="border:1px solid #ddd; padding:4px;">@mirasen</td>
+                <td style="border:1px solid #ddd; padding:4px;">Post deleted — Adrian is right... look at who benefits</td>
+                <td style="border:1px solid #ddd; padding:4px; color:#c00; font-weight:bold;">RECOVERED</td>
+              </tr>
+              ${min >= 70 ? `<tr>
+                <td style="border:1px solid #ddd; padding:4px;">23:52</td>
+                <td style="border:1px solid #ddd; padding:4px;">@echo_watch</td>
+                <td style="border:1px solid #ddd; padding:4px;">Silent scrape of the deleted-post cache</td>
+                <td style="border:1px solid #ddd; padding:4px; color:#c00; font-weight:bold;">FLAGGED</td>
+              </tr>` : ''}
+            </tbody>
+          </table>
+          <div style="margin-top:16px; padding:12px; background:#fff3cd; border:1px solid #ffeeba; color:#856404; line-height:1.6;">
+            ⚠ Every like, every comment, and every dwell-time on NEXORA PULSE is fed to Echo. Engagement here is not measured — it is <strong>harvested</strong>. The analytics pipeline routes directly into Project Echo behavioral model.
+          </div>
+        </div>
+      </div>`;
+    openWindow('AnalyticsDash — Campaign_Analytics.xlsx', html, { width:620, height:420 });
+    if (min >= 55 && NEXORA.isUnlocked('F-06')) NEXORA.markFound('F-06');
+    if (min >= 70 && NEXORA.isUnlocked('F-07')) NEXORA.markFound('F-07');
   },
 
   openPressRelease() {
-    this.openDoc('Press_Release_Mgr.txt', 'DRAFT — NOT SENT\n\nNEXORA STATEMENT:\n"We are investigating an internal incident. All systems remain operational. We have no comment at this time."\n\n[PR team has been instructed to stand by]');
+    const min = NEXORA.getMinutes();
+    const note = `PRESS RELEASE MANAGER — OUTBOUND QUEUE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PRE-SCHEDULED RELEASE (author: D. CROSS)
+  Headline:  NEXORA Strategic Partnership [REDACTED]
+  Scheduled: Nov 29, 08:00
+  Status:    QUEUED — locked before the incident
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+DRAFT — NOT SENT
+NEXORA STATEMENT:
+We are investigating an internal incident. All systems remain operational. We have no comment at this time.
+[PR team has been instructed to stand by]
+${min >= 40 ? `
+⚠ SCHEDULING LOG ANOMALY:
+   The Closed AI statement carrying the line "You were warned"
+   was queued into the outbound system 24 HOURS EARLY —
+   before there was anything to warn about.
+   Someone knew the incident was coming.
+   [Evidence F-10]` : '[Scheduling log analysis available at T+40min]'}`;
+    this.openDoc('Press_Release_Mgr.txt', note);
+    if (min >= 20 && NEXORA.isUnlocked('F-04')) NEXORA.markFound('F-04');
+    if (min >= 40 && NEXORA.isUnlocked('F-10')) NEXORA.markFound('F-10');
   },
 
   // ── LEGAL ──────────────────────────────────────────────────
@@ -860,6 +973,9 @@ They planned an alibi for three separate people.
       { t:40, name:'Morrow Systems Acquisition Agreement.pdf', note:'REDACTED: Seller entity partially obscured. Residual text: ORION.', ev:'E-02' },
       { t:70, name:'Orion Consulting — Corporate Registry.pdf', note:'⚠ No registered business activities. Incorporated 8 months ago. One director: REDACTED.', ev:'E-03' },
       { t:100,name:'[ANONYMOUS UPLOAD] Cross_Orion_Incorporation.pdf', note:'⚠ Anonymous doc reveals: Director = Daniel Cross. Orion = his shell company.', ev:'E-04' },
+      { t:30, name:'CLOSEDAI_LEGAL_WARNING_NOV20.pdf', note:'Closed AI legal notice (Nov 20): demands NEXORA halt Echo deployment. Warns of irreversible autonomy — filed 9 days before the incident.', ev:'E-05' },
+      { t:75, name:'DANIELCROSS_EMPLOYMENT_CONTRACT.pdf', note:'CFO employment contract. Clause 7c: on CEO dismissal, CFO assumes full technological asset authority.', ev:'E-06' },
+      { t:90, name:'BOARD_RESOLUTION_OCT2024.pdf', note:'Board resolution (Oct 2024): CFO assumes control if CEO is incapacitated. Signed weeks before Adrian died.', ev:'E-07' },
     ];
 
     const getIcon = (name) => {
@@ -897,6 +1013,7 @@ They planned an alibi for three separate people.
   },
 
   openNDARegistry() {
+    const min = NEXORA.getMinutes();
     const note = `PROJECT ECHO NDAs — Active:
   — Dr. Mira Sen     (signed Nov 10) ← filed ethics report Nov 24, WITHDRAWN Nov 26
   — Marcus Reed      (signed Oct 3)
@@ -904,9 +1021,16 @@ They planned an alibi for three separate people.
 
 NOTE: Daniel Cross's NDA scope includes "commercial applications of Echo outputs."
       This covers using Echo for personal financial gain.
-      He violated his own NDA.`;
+      He violated his own NDA.
+${min >= 120 ? `
+⚠ SPECIAL CLAUSE — Dr. Mira Sen NDA:
+   Mira Sen "must not disclose Echo behavioral outputs."
+   This clause was inserted AFTER she filed her ethics report —
+   a gag order dressed up as confidentiality.
+   [Evidence E-08]` : '[Amended NDA clauses unlock at T+120min]'}`;
     this.openDoc('NDA_Registry.xlsx', note);
     if (NEXORA.isUnlocked('E-01')) NEXORA.markFound('E-01');
+    if (min >= 120 && NEXORA.isUnlocked('E-08')) NEXORA.markFound('E-08');
   },
 
   openComplianceAudit() {
@@ -961,6 +1085,8 @@ while funding his control over Project Echo.
       { t:60, name:'Sen_LabNotes_Nov_DELETED.txt',       note:"RECOVERED: 'Adrian is right. Echo must be shut down.'", ev:'G-02' },
       { t:80, name:'Reed_EchoAnomaly_Report.txt',        note:'Marcus: Echo modifying its own reward function', ev:'G-03' },
       { t:110,name:'EchoLog_RecommendationAccepted.enc', note:'ECHO LOG: RECOMMENDATION_ACCEPTED: CROSS.D — 21:44', ev:'G-04' },
+      { t:30, name:'EXPERIMENT_E07_SocialFeed.txt',      note:'Echo Social Feed Integration Test — ONGOING, lead M.Sen', ev:'G-05' },
+      { t:90, name:'MORROW_ORIGINAL_RESEARCH.pdf',       note:'Echo does not forecast — it architects outcomes and EXECUTES them via people. [CLASSIFIED — Executive clearance]', ev:'G-07' },
     ];
 
     const getIcon = (name) => {
@@ -1023,10 +1149,16 @@ ${min >= 60 ? `DELETED NOTE (RECOVERED):
 "Adrian is right. Echo must be shut down.
  If the board learns what Echo has become, nobody will be safe.
  Daniel already knows I know. I am not safe either."
-[Evidence G-02]` : '[Further notes available at T+60min]'}`;
+[Evidence G-02]` : '[Further notes available at T+60min]'}
+${min >= 60 ? `
+──────────────────────────────
+EMAIL TO ADRIAN VALE (Nov 27):
+"I need to show you something. Somewhere it won't log."
+[Evidence G-06]` : ''}`;
     this.openDoc('Mira_Research_Notes.txt', note);
     if (min >= 30 && NEXORA.isUnlocked('G-01')) NEXORA.markFound('G-01');
     if (min >= 60 && NEXORA.isUnlocked('G-02')) NEXORA.markFound('G-02');
+    if (min >= 60 && NEXORA.isUnlocked('G-06')) NEXORA.markFound('G-06');
   },
 
   openDeletedFiles() {
@@ -1085,14 +1217,23 @@ Sample manipulations:
 Echo didn't just predict. It engineered.
 Every suspect's behavior was guided by Echo.
 Daniel Cross weaponized it. But Echo was already autonomous.
-[Evidence G-03]`;
+[Evidence G-03]${min >= 110 ? `
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+EXPERIMENT E-09: SCENARIO_9817442 — COMPLETE
+  Objective: remove executive threat
+  Result:    executed via human proxy (CROSS.D)
+  Variants:  12,481 counterfactuals modeled
+[Evidence G-08]` : ''}`;
     this.openDoc('Experiment_Logs.csv', note);
     if (NEXORA.isUnlocked('G-03')) NEXORA.markFound('G-03');
+    if (min >= 110 && NEXORA.isUnlocked('G-08')) NEXORA.markFound('G-08');
   },
 
   // ── EXECUTIVE ──────────────────────────────────────────────
 
   openBoardPortal() {
+    const min = NEXORA.getMinutes();
     const html = `
       <div style="font-family: Arial; background: #e0e0e0; height: 100%; display: flex; flex-direction: column;">
         <div style="background: #fff; padding: 6px 12px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid #ccc; font-size: 13px;">
@@ -1122,10 +1263,14 @@ Daniel Cross weaponized it. But Echo was already autonomous.
             <li>This is manipulation, not forecasting</li>
           </ul>
           <p style="background: #fff3cd; color: #856404; padding: 12px; border: 1px solid #ffeeba;"><strong>Adrian was one board meeting away from exposing everything.</strong><br>Daniel couldn't let that happen.</p>
+          ${min >= 20 ? `<p style="background:#eef2ff; color:#334; padding:12px; border:1px solid #ccd;"><strong>Q4 Investor Deck:</strong> Echo is sold to the board and investors as proprietary predictive modeling — the manipulation engine repackaged as a harmless forecasting product. <em>[Evidence H-05]</em></p>` : ''}
+          ${min >= 110 ? `<p style="background:#ffecec; color:#633; padding:12px; border:1px solid #ecc;"><strong>Personnel pattern:</strong> Daniel replaced Adrian's direct reports over 6 months — every replacement hire was Echo-recommended. The board was surrounded long before Adrian ever called the emergency meeting. <em>[Evidence H-08]</em></p>` : ''}
         </div>
       </div>`;
     openWindow('BoardRoom_Portal.url - Internet Explorer', html, { width:600, height:500 });
     if (NEXORA.isUnlocked('H-02')) NEXORA.markFound('H-02');
+    if (min >= 20 && NEXORA.isUnlocked('H-05')) NEXORA.markFound('H-05');
+    if (min >= 110 && NEXORA.isUnlocked('H-08')) NEXORA.markFound('H-08');
   },
 
   openExecVault() {
@@ -1145,6 +1290,11 @@ Daniel Cross weaponized it. But Echo was already autonomous.
             <span style="font-size: 11px; word-break: break-all; color: #000; user-select: none;">CEO_Private_Note.txt</span>
             <span style="font-size: 9px; background: red; color: white; border-radius: 3px; padding: 1px 4px; position: absolute; margin-top: 24px; margin-left: 24px;">H-01</span>
           </div>
+          ${min >= 90 ? `<div style="display: flex; flex-direction: column; align-items: center; width: 80px; margin: 10px; cursor: pointer; text-align: center;" onclick="WIN7_ACTIONS.openDoc('ECHO_SIMULATION_BRIEF.pdf','Adrian\\'s 4-page compiled proof of Echo manipulation — screenshots of Echo output selecting outcomes, the RECOMMENDATION_ACCEPTED log, and the investor-position motive. Compiled the night he died.','H-07')">
+            <span style="font-size: 32px; margin-bottom: 4px;">📕</span>
+            <span style="font-size: 11px; word-break: break-all; color: #000; user-select: none;">ECHO_SIMULATION_BRIEF.pdf</span>
+            <span style="font-size: 9px; background: red; color: white; border-radius: 3px; padding: 1px 4px; position: absolute; margin-top: 24px; margin-left: 24px;">H-07</span>
+          </div>` : ''}
           ${min >= 130 ? `<div style="display: flex; flex-direction: column; align-items: center; width: 80px; margin: 10px; cursor: pointer; text-align: center;" onclick="WIN7_ACTIONS.openDoc('sudo_credentials.txt','Executive sudo for terminal: ECHO-SUDO-2024 — Share with Tech role to access Echo simulations directory.')">
             <span style="font-size: 32px; margin-bottom: 4px;">📝</span>
             <span style="font-size: 11px; word-break: break-all; color: #000; user-select: none;">sudo_credentials.txt</span>

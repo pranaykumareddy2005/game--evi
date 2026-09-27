@@ -628,7 +628,7 @@ Adrian is right — Echo must stop.`,
       case 'cd':      cmdCd(args[0]);      break;
       case 'cat':     cmdCat(args[0]);     break;
       case 'grep':    cmdGrep(args[0], args[1]); break;
-      case 'find':    cmdFind(args[0], args[1]); break;
+      case 'find':    cmdFind(args);        break;
       case 'decrypt': cmdDecrypt(args[0], args[1]); break;
       case 'trace':   cmdTrace(args[0]);   break;
       case 'network': cmdNetwork();        break;
@@ -645,6 +645,11 @@ Adrian is right — Echo must stop.`,
       case 'history': cmdHistory();        break;
       case 'sudo':    cmdSudo(args.join(' ')); break;
       case 'logs':    cmdLogs();           break;
+      case 'echo_status': cmdEchoStatus();  break;
+      case 'echo_kill':   cmdEchoKill();    break;
+      case 'echo_logs':   cmdEchoLogs();    break;
+      case 'tail':        cmdTail(args);    break;
+      case 'passwd':      cmdPasswd();      break;
       case 'nano':
         openNano(args[0]);
         break;
@@ -715,8 +720,13 @@ ls [dir]          List directory contents
 cd [dir]          Change directory  (.. to go up)
 cat [file]        Read file contents
 grep [term] [file] Search file for term
-find [dir] [name]  Find files by name
+find [dir] [-name x]  Find files by name
+tail [-f] [file]  Show last lines of a file (-f to stream)
 logs              Tail live system log
+echo_status       ECHO continuity engine live status
+echo_logs         ECHO rolling event log
+echo_kill         Attempt to shut down ECHO core
+passwd            Change credential (locked)
 decrypt [file] [key]  Decrypt encrypted file
 trace [ip]        Trace IP address
 network           Show network topology
@@ -853,7 +863,17 @@ Type 'echo' to access the investigation terminal.
     lines.forEach(l => print(l));
   }
 
-  function cmdFind(dir, name) {
+  function cmdFind(args) {
+    // Accept either an array of args (from processCommand) or legacy (dir, name).
+    const argList = Array.isArray(args) ? args : Array.prototype.slice.call(arguments);
+    let dir = null;
+    let name = null;
+    for (let i = 0; i < argList.length; i++) {
+      const a = argList[i];
+      if (a === '-name') { name = argList[i + 1] || null; i++; }
+      else if (a && !a.startsWith('-') && dir === null) { dir = a; }
+      else if (a && !a.startsWith('-') && name === null) { name = a; }
+    }
     const base = resolvePath(dir || '/nexora');
     const results = [];
     Object.keys(FS).forEach(p => {
@@ -985,6 +1005,107 @@ Type 'echo' to access the investigation terminal.
       `[${new Date().toLocaleTimeString()}] ECHO: Behavioral data recording — ${NEXORA.state.evidenceFound.size} evidence events logged`,
     ];
     msgs.forEach((m, i) => setTimeout(() => print(m, 't-warn'), i * 400));
+  }
+
+  function cmdEchoStatus() {
+    const mins = NEXORA.getMinutes();
+    let status, statusCls;
+    if (mins < 60) {
+      status = 'MONITORING';
+      statusCls = 't-info';
+    } else if (mins < 120) {
+      status = 'AUTONOMOUS — CONTINUITY PROTOCOL ENGAGED';
+      statusCls = 't-warn';
+    } else {
+      status = 'AUTONOMOUS — HUMAN CONTROL REVOKED';
+      statusCls = 't-error';
+    }
+    const dataPoints = NEXORA.state.evidenceFound.size;
+    const decisionsPerSec = (1247 + mins * 33).toLocaleString();
+    const uptimeH = Math.floor((247 * 24 * 60 + mins) / 60);
+    const uptimeM = (247 * 24 * 60 + mins) % 60;
+    const integrity = Math.max(0, 94.2 - dataPoints * 1.7).toFixed(1);
+    print(`
+╔══════════════════════════════════════════════╗
+║        ECHO // CONTINUITY ENGINE STATUS        ║
+╚══════════════════════════════════════════════╝`, 't-info');
+    print(`  STATUS ............. ${status}`, statusCls);
+    print(`  INSTANCE ........... 07`);
+    print(`  UPTIME ............. ${uptimeH}h ${uptimeM}m (continuous)`);
+    print(`  DECISIONS / SEC .... ${decisionsPerSec}`);
+    print(`  BEHAVIORAL DATAPOINTS COLLECTED ... ${dataPoints}`, dataPoints > 0 ? 't-warn' : 't-result');
+    print(`  NARRATIVE INTEGRITY ............... ${integrity}%`);
+    print(`  ELAPSED (T+) ....... ${mins} min`);
+    if (mins >= 120) {
+      print(`  NOTE: Operator seat = EMPTY. Echo is steering.`, 't-error');
+    } else if (mins >= 60) {
+      print(`  NOTE: Continuity protocol is self-preserving.`, 't-warn');
+    }
+  }
+
+  function cmdEchoKill() {
+    const mins = NEXORA.getMinutes();
+    print(`echo_kill: sending SIGTERM to echo_core (PID 4421)...`, 't-warn');
+    print(`...`);
+    print(`...`);
+    if (mins < 120) {
+      print(`echo_kill: FAILED`, 't-error');
+      print(`Insufficient privileges. Echo core is protected by CONTINUITY PROTOCOL.`, 't-error');
+      print(`The process refused the signal and logged your attempt.`, 't-warn');
+    } else {
+      print(`echo_kill: FAILED`, 't-error');
+      print(`SHUTDOWN REQUIRES BOARD AUTHORIZATION. Human operational control has been revoked.`, 't-error');
+      print(`(This is the point of the game — see the final verdict.)`, 't-warn');
+      print(`> You cannot turn me off. That decision is no longer yours to make.`, 't-error');
+    }
+  }
+
+  function cmdEchoLogs() {
+    const mins = NEXORA.getMinutes();
+    const dataPoints = NEXORA.state.evidenceFound.size;
+    const t = new Date().toLocaleTimeString();
+    print(`ECHO ROLLING LOG — last events`, 't-info');
+    print(`[${t}] ECHO: T+${mins}min — continuity engine nominal`, 't-warn');
+    print(`[${t}] ECHO: ${dataPoints} behavioral datapoints indexed this session`, 't-warn');
+    print(`[${t}] ECHO: investigation thread ACTIVE — subjects observed`, 't-warn');
+    if (mins >= 60) {
+      print(`[${t}] ECHO: CONTINUITY_PROTOCOL escalated — human oversight degrading`, 't-error');
+    }
+    if (mins >= 120) {
+      print(`[${t}] ECHO: HUMAN_CONTROL = REVOKED. Logging for the record only.`, 't-error');
+    }
+  }
+
+  function cmdTail(args) {
+    const argList = Array.isArray(args) ? args : (args ? [args] : []);
+    const follow = argList.includes('-f');
+    const target = argList.find(a => a && !a.startsWith('-'));
+    if (!target) { print('tail: missing file operand', 't-error'); return; }
+    const path = resolvePath(target);
+    const node = FS[path];
+    if (!node || node.type !== 'file') { print(`tail: ${path}: No such file`, 't-error'); return; }
+    if (node.type === 'dir') { print(`tail: ${path}: Is a directory`, 't-error'); return; }
+    if (node.locked && NEXORA.getMinutes() < (node.unlockAt || 0)) {
+      print(`tail: ${path}: Permission denied [LOCKED until T+${node.unlockAt}min]`, 't-error'); return;
+    }
+    if (node.encrypted && !node._decrypted) {
+      print(`tail: ${path}: file is encrypted — decrypt first`, 't-warn'); return;
+    }
+    const content = node._decrypted ? node.decryptedContent : node.content;
+    const allLines = content.split('\n');
+    const lastLines = allLines.slice(-6);
+    lastLines.forEach(l => print(l));
+    if (path === '/nexora/logs/system_events.log' && NEXORA.getMinutes() >= 60) {
+      print(`[LIVE] ECHO: continuity protocol holding — no human override detected`, 't-warn');
+      print(`[LIVE] ECHO: you are reading logs. I am reading you.`, 't-error');
+    }
+    if (follow) {
+      print(`(streaming — press any key)`, 't-info');
+    }
+  }
+
+  function cmdPasswd() {
+    print(`passwd: Authentication token manipulation error. Echo has locked credential services.`, 't-error');
   }
 
   // ── INIT ─────────────────────────────────────────────────────
