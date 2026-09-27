@@ -134,6 +134,9 @@ function loadWin7Role(roleKey) {
   }, 300);
 }
 
+// Tracks which cross-role secrets have already been posted to chat (idempotent-ish).
+const WIN7_TECH_SHARED = {};
+
 // ── WINDOWS 7 ACTIONS (App launchers) ────────────────────────
 const WIN7_ACTIONS = {
 
@@ -149,6 +152,27 @@ const WIN7_ACTIONS = {
     };
     const content = msgs[roleKey] || 'Begin your investigation.';
     openWindow('⚠ NEXORA EMERGENCY BRIEF', `<div class="doc-view highlight-gold">${content}</div>`, { width:480, height:300 });
+  },
+
+  // ── CROSS-ROLE HANDOFF ─────────────────────────────────────
+  // Share a secret the Tech terminal gates on into the cross-team chat.
+  // In synced group play, a message whose role === currentRole is broadcast
+  // to all players, so the Tech player receives the key/password.
+  shareWithTech(kind) {
+    if (WIN7_TECH_SHARED[kind]) {
+      NEXORA.showNotification('Already Shared', 'You already posted this to the cross-team chat.', 'info');
+      return;
+    }
+    if (kind === 'decrypt') {
+      NEXORA.addChatMessage(NEXORA.state.currentRole, '🔑 For TECH — decrypt key: F1N4NC3-K3Y-2024  (run: decrypt echo_logs_recent.enc F1N4NC3-K3Y-2024)', '#ffd700');
+      NEXORA.showNotification('Shared with Tech', 'Decrypt key posted to cross-team chat.', 'info');
+    } else if (kind === 'sudo') {
+      NEXORA.addChatMessage(NEXORA.state.currentRole, '🔑 For TECH — sudo password: ECHO-SUDO-2024  (run: sudo ECHO-SUDO-2024 ls /nexora/echo/echo_simulations)', '#a29bfe');
+      NEXORA.showNotification('Shared with Tech', 'Sudo password posted to cross-team chat.', 'info');
+    } else {
+      return;
+    }
+    WIN7_TECH_SHARED[kind] = true;
   },
 
   // ── FINANCE ────────────────────────────────────────────────
@@ -263,6 +287,7 @@ const WIN7_ACTIONS = {
           <div style="margin-left: 10px; padding: 4px; background: #cce8ff; border: 1px solid #99d1ff;">Vault</div>
         </div>
         <div style="flex: 1; background: #fff; padding: 16px; display: flex; flex-wrap: wrap; align-content: flex-start; overflow-y: auto;">
+          ${min >= 90 ? `<button onclick="WIN7_ACTIONS.shareWithTech('decrypt')" style="width:100%; margin-bottom:12px; padding:8px 12px; background:#107c41; color:#fff; border:1px solid #0b5c30; border-radius:4px; font-size:12px; font-weight:bold; cursor:pointer;">📤 SHARE DECRYPT KEY WITH TECH</button>` : ''}
           ${items || '<p style="color:#888; width:100%; text-align:center;">This folder is empty.</p>'}
         </div>
       </div>
@@ -1285,6 +1310,7 @@ EXPERIMENT E-09: SCENARIO_9817442 — COMPLETE
           <div style="margin-left: 10px; padding: 4px; background: #cce8ff; border: 1px solid #99d1ff;">Executive_Vault</div>
         </div>
         <div style="flex: 1; background: #fff; padding: 16px; display: flex; flex-wrap: wrap; align-content: flex-start; overflow-y: auto;">
+          ${min >= 90 ? `<button onclick="WIN7_ACTIONS.shareWithTech('sudo')" style="width:100%; margin-bottom:12px; padding:8px 12px; background:#6c5ce7; color:#fff; border:1px solid #4b3fb0; border-radius:4px; font-size:12px; font-weight:bold; cursor:pointer;">📤 SHARE SUDO PASSWORD WITH TECH</button>` : ''}
           <div style="display: flex; flex-direction: column; align-items: center; width: 80px; margin: 10px; cursor: pointer; text-align: center;" onclick="WIN7_ACTIONS.openDoc('CEO_Private_Note.txt','Marcus is not the problem. He found what Echo became before I did. Protect him. — A.V.')">
             <span style="font-size: 32px; margin-bottom: 4px;">📝</span>
             <span style="font-size: 11px; word-break: break-all; color: #000; user-select: none;">CEO_Private_Note.txt</span>

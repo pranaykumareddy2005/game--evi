@@ -466,6 +466,18 @@ function makeDraggable(winEl) {
   if (!titlebar) return;
   let dragging = false, ox = 0, oy = 0;
 
+  // Keep at least ~40px of the window on-screen so it can't be dragged away.
+  function moveTo(clientX, clientY) {
+    let left = clientX - ox;
+    let top  = clientY - oy;
+    const maxLeft = Math.max(0, window.innerWidth  - 40);
+    const maxTop  = Math.max(0, window.innerHeight - 40);
+    left = Math.min(Math.max(0, left), maxLeft);
+    top  = Math.min(Math.max(0, top),  maxTop);
+    winEl.style.left = left + 'px';
+    winEl.style.top  = top  + 'px';
+  }
+
   titlebar.addEventListener('mousedown', e => {
     dragging = true;
     ox = e.clientX - winEl.offsetLeft;
@@ -475,11 +487,31 @@ function makeDraggable(winEl) {
 
   document.addEventListener('mousemove', e => {
     if (!dragging) return;
-    winEl.style.left = (e.clientX - ox) + 'px';
-    winEl.style.top  = (e.clientY - oy) + 'px';
+    moveTo(e.clientX, e.clientY);
   });
 
   document.addEventListener('mouseup', () => { dragging = false; });
+
+  // ── TOUCH DRAG (mirrors the mouse handlers for touchscreens) ──
+  titlebar.addEventListener('touchstart', e => {
+    const t = e.touches && e.touches[0];
+    if (!t) return;
+    dragging = true;
+    ox = t.clientX - winEl.offsetLeft;
+    oy = t.clientY - winEl.offsetTop;
+    winEl.style.zIndex = ++window._zTop || 200;
+  }, { passive: true });
+
+  document.addEventListener('touchmove', e => {
+    if (!dragging) return;
+    const t = e.touches && e.touches[0];
+    if (!t) return;
+    e.preventDefault(); // stop the page scrolling while dragging
+    moveTo(t.clientX, t.clientY);
+  }, { passive: false });
+
+  document.addEventListener('touchend', () => { dragging = false; });
+  document.addEventListener('touchcancel', () => { dragging = false; });
 
   // Close / min / max buttons
   const closeBtn = winEl.querySelector('.win-dot.close');
@@ -525,10 +557,20 @@ function openWindow(title, contentHtml, opts = {}) {
 
   const win = document.createElement('div');
   win.className = 'window focused';
-  win.style.left   = (80 + Math.random()*100) + 'px';
-  win.style.top    = (60 + Math.random()*60) + 'px';
-  win.style.width  = (opts.width  || 600) + 'px';
-  win.style.height = (opts.height || 400) + 'px';
+  if (window.innerWidth <= 760) {
+    // On phones/touch, fill the screen (leave room for the top bar ~48px
+    // and a small bottom margin) instead of a random small window.
+    const margin = 8;
+    win.style.left   = margin + 'px';
+    win.style.top    = 48 + 'px';
+    win.style.width  = Math.max(120, window.innerWidth  - margin * 2) + 'px';
+    win.style.height = Math.max(120, window.innerHeight - 48 - 48) + 'px';
+  } else {
+    win.style.left   = (80 + Math.random()*100) + 'px';
+    win.style.top    = (60 + Math.random()*60) + 'px';
+    win.style.width  = (opts.width  || 600) + 'px';
+    win.style.height = (opts.height || 400) + 'px';
+  }
   win.style.zIndex = ++window._zTop || 200;
 
   win.innerHTML = `

@@ -1669,3 +1669,306 @@ html, body {
   font-size: 11px;
   flex-shrink: 0;
 }
+
+/* ============================================================
+   ============================================================
+   RESPONSIVE + ACCESSIBILITY + POLISH  (additive overrides)
+   Appended section — consistent with the dark neon aesthetic
+   above and its CSS variables. Nothing above is removed; these
+   rules layer on top for phones/tablets, reduced-motion users,
+   keyboard users, and general subtle polish.
+   ============================================================
+   ============================================================ */
+
+/* ------------------------------------------------------------
+   0. GLOBAL SAFETY NETS (all viewports)
+   ------------------------------------------------------------ */
+
+/* Never allow the page itself to scroll sideways. box-sizing is
+   already border-box via the reset, restated here for clarity. */
+html, body {
+  overflow-x: hidden;
+  max-width: 100%;
+}
+*, *::before, *::after { box-sizing: border-box; }
+
+/* ------------------------------------------------------------
+   1. POLISH — subtle, applies on desktop AND mobile
+   ------------------------------------------------------------ */
+
+/* Reusable emphasis pulse for evidence / notification moments.
+   Use by adding class .nexora-pulse to any element. */
+@keyframes nexora-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(0,170,255,0.45); }
+  50%      { box-shadow: 0 0 14px 4px rgba(0,170,255,0.35); }
+}
+
+.nexora-pulse { animation: nexora-pulse 1.6s ease-in-out infinite; }
+
+/* Evidence badge / tag gentle attention pulse when emphasised */
+.evidence-badge.nexora-pulse,
+.pp-evidence-tag.nexora-pulse { animation: nexora-pulse 1.6s ease-in-out infinite; }
+
+/* Gentle fade + scale-in when an app window opens. Additive:
+   the window still uses its existing absolute positioning. */
+@keyframes nexora-window-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.985); }
+  to   { opacity: 1; transform: translateY(0)   scale(1); }
+}
+
+.window { animation: nexora-window-in 0.22s ease-out; }
+
+/* Gentle hover lift on desktop icons (kept snappy, Win7-friendly) */
+.desktop-icon {
+  transition: background 0.1s, border-color 0.1s, transform 0.12s ease;
+}
+.desktop-icon:hover { transform: translateY(-2px); }
+
+/* ------------------------------------------------------------
+   2. FOCUS-VISIBLE — clear neon outline for keyboard users
+   ------------------------------------------------------------ */
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible,
+.desktop-icon:focus-visible,
+.role-card:focus-visible,
+.fb-item:focus-visible,
+.win-btn:focus-visible {
+  outline: 2px solid var(--pulse);
+  outline-offset: 2px;
+  border-radius: var(--r);
+}
+
+/* On the bright Win7 window chrome a lighter halo reads better */
+.win-btn:focus-visible {
+  outline-color: #cfe9ff;
+  box-shadow: 0 0 0 2px rgba(0,170,255,0.4);
+}
+
+/* ------------------------------------------------------------
+   3. CONTRAST — lift the dimmest greys so they stay legible on
+   dark panels without washing out the aesthetic. Original
+   values like #445 / #5a7090 / #4d8654 are quite dark.
+   ------------------------------------------------------------ */
+
+.pp-time { color: #8aaabb; }                 /* was #445 */
+.pp-handle, .pp-name ~ .pp-handle { color: #7d97b8; } /* was #5a7090 */
+.role-card .rc-sub,
+.char-card .cc-title,
+.pp-action { color: #7d97b8; }               /* was #5a7090 */
+.cc-status.unknown { color: #8aa0bb; }       /* was #5a7090 */
+#role-switcher label { color: #8aa0c4; }     /* was #6080aa */
+.btn-story.secondary { color: #8aa0c4; }     /* was #6080aa */
+.nano-shortcuts { color: #6fae77; }          /* was #4d8654 */
+.terminal-inner-title { color: #7d9784; }    /* was #5e7567 */
+
+/* ------------------------------------------------------------
+   4. REDUCED MOTION — respect prefers-reduced-motion: reduce
+   ------------------------------------------------------------ */
+
+@media (prefers-reduced-motion: reduce) {
+  /* Broadly quiet all animation/transition for these users */
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  /* Explicitly kill the signature motion effects */
+  #nexora-scanline { animation: none !important; }
+  #nexora-vignette { animation: none !important; }
+  #terminal-shell::before,
+  #terminal-shell::after { animation: none !important; }
+  .terminal-inner { animation: none !important; }
+  #terminal-output { animation: none !important; }
+  #echo-ticker-text { animation: none !important; transform: none !important; }
+  .btn-story.primary,
+  .tb-status,
+  .pp-comment.anomaly { animation: none !important; }
+  #terminal-input,
+  .t-input-prompt { caret-color: #61ff71; }   /* keep visible, no blink */
+  .glitch::before,
+  .glitch::after { animation: none !important; opacity: 0 !important; }
+  .window { animation: none !important; }
+  .nexora-pulse,
+  .evidence-badge.nexora-pulse,
+  .pp-evidence-tag.nexora-pulse { animation: none !important; }
+}
+
+/* ------------------------------------------------------------
+   5. MOBILE / TABLET  (<= 760px)
+   Make the fixed-layout desktop usable on small touch screens
+   without breaking the desktop experience above the breakpoint.
+   ------------------------------------------------------------ */
+
+@media (max-width: 760px) {
+
+  html, body {
+    font-size: 14px;
+    overflow-x: hidden;
+  }
+
+  /* ---- Top bar: allow wrapping to two lines, shrink type ---- */
+  #top-bar {
+    height: auto;
+    min-height: 42px;
+    flex-wrap: wrap;
+    row-gap: 2px;
+    padding: 4px 10px;
+    justify-content: space-between;
+  }
+  #top-bar .tb-left { gap: 10px; flex-wrap: wrap; }
+  #top-bar .tb-logo { font-size: 11px; letter-spacing: 2px; }
+  #top-bar .tb-status { font-size: 10px; }
+
+  /* Clock: stop absolute-centering (it overlaps on narrow bars) */
+  #clock {
+    position: static;
+    left: auto;
+    transform: none;
+    font-size: 15px;
+    letter-spacing: 2px;
+    order: 3;
+  }
+
+  /* Role switcher: shrink and let the select flex down */
+  #role-switcher { gap: 5px; flex: 1 1 100%; justify-content: flex-end; }
+  #role-switcher label { font-size: 9px; }
+  #role-select {
+    min-width: 0;
+    max-width: 60vw;
+    font-size: 10px;
+    padding: 3px 6px;
+  }
+
+  /* The shell sits below the (now possibly taller) top bar.
+     Anchor from the top with a safe offset instead of a fixed 42px. */
+  #win7-shell,
+  #terminal-shell {
+    top: 68px;
+  }
+
+  /* ---- App windows: behave like maximized panels ----
+     JS may also auto-maximize; these !important overrides keep
+     CSS from fighting inline drag styles while still looking right. */
+  .window {
+    left: 4px !important;
+    right: 4px;
+    top: 6px !important;
+    width: auto !important;
+    max-width: calc(100vw - 8px);
+    height: auto;
+    max-height: calc(100vh - 120px);
+    min-width: 0;
+    resize: none;                 /* touch can't use the resize grip */
+    border-radius: 6px;
+  }
+  .win-body { overflow: auto; -webkit-overflow-scrolling: touch; }
+  .win-title { font-size: 11px; }
+
+  /* ---- Chat: full-width bottom sheet ---- */
+  #chat-panel {
+    left: 0;
+    right: 0;
+    width: 100vw;
+    bottom: 0;
+    height: auto;
+    max-height: 50vh;
+    border-radius: var(--r-lg) var(--r-lg) 0 0;
+    border-left: none;
+    border-right: none;
+  }
+  #chat-toggle { right: 12px; bottom: 34px; }  /* clear the ticker */
+
+  /* ---- Storyboard / intro ---- */
+  .story-frame { padding: 20px 16px; max-width: 100%; }
+  .story-title { font-size: clamp(22px, 7vw, 34px); margin-bottom: 16px; }
+  .story-body {
+    font-size: 12px;
+    line-height: 1.6;
+    margin-bottom: 20px;
+  }
+  .story-act { margin-bottom: 12px; }
+  .story-visual { margin: 16px 0; }
+  .tl-item { margin-left: 12px; padding-left: 14px; gap: 10px; }
+
+  /* Nav buttons wrap and go full width when cramped */
+  .story-nav { flex-wrap: wrap; justify-content: center; width: 100%; }
+  .btn-story { padding: 10px 20px; }
+
+  /* ---- Home / lobby screens (defensive: may not exist here) ---- */
+  #home-screen,
+  #lobby-screen {
+    padding: 16px !important;
+    overflow-y: auto;
+    max-height: 100vh;
+  }
+
+  /* ---- Card grids collapse to a single scrollable column ---- */
+  .role-grid,
+  .char-grid {
+    grid-template-columns: 1fr;
+    gap: 8px;
+    max-width: 100%;
+    margin: 16px 0;
+  }
+  /* Two columns on wider phones/small tablets for the role grid */
+  @media (min-width: 480px) {
+    .role-grid { grid-template-columns: repeat(2, 1fr); }
+    .char-grid { grid-template-columns: repeat(2, 1fr); }
+  }
+
+  /* ---- Desktop icons: smaller, wrap naturally ---- */
+  #desktop { padding: 8px 6px; }
+  #desktop-icons {
+    flex-direction: row;
+    flex-wrap: wrap;
+    height: auto;
+    gap: 4px 6px;
+  }
+  .desktop-icon {
+    width: 66px;
+    min-height: 66px;
+    padding: 3px;
+  }
+  .di-emoji { font-size: 26px; margin-bottom: 3px; }
+  .di-label { font-size: 10px; }
+
+  /* ---- Taskbar: allow horizontal scroll of app buttons ---- */
+  #taskbar { height: 44px; }
+  #taskbar-apps { overflow-x: auto; overflow-y: hidden; }
+  .tb-app-btn { min-width: 40px; font-size: 10px; padding: 0 7px; }
+
+  /* ---- Terminal: fit width, keep it readable, no page scroll ---- */
+  .terminal-inner {
+    margin: 10px 8px 10px;
+    border-radius: 18px / 14px;
+  }
+  #terminal-output {
+    padding: 12px 12px 16px;
+    font-size: 12px;
+  }
+  #terminal-input-row { padding: 6px 12px 10px; }
+  .t-input-prompt, #terminal-input { font-size: 12px; }
+  #normal-terminal { padding: 12px; }
+  #normal-output { font-size: 12px; }
+
+  /* ---- Notifications don't hog the small screen ---- */
+  #notification-stack {
+    right: 8px;
+    left: 8px;
+    max-width: none;
+  }
+}
+
+/* Extra squeeze for very small phones */
+@media (max-width: 400px) {
+  #top-bar .tb-logo { font-size: 10px; }
+  #clock { font-size: 13px; }
+  .desktop-icon { width: 58px; min-height: 58px; }
+  .di-emoji { font-size: 22px; }
+}
